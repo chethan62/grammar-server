@@ -1,0 +1,13 @@
+[Unit]
+Description=grammar-server (LanguageTool-compatible API backed by harper-ls)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/projects/grammar-server/bin/grammar-server --port 8875 --dialect American
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
