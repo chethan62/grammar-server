@@ -145,7 +145,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
-	mux.HandleFunc("/", s.handleRoot)
+	mux.HandleFunc("/status", s.handleRoot)   // old health endpoint
+	mux.HandleFunc("/", s.serveUI)            // single-page UI
 	return logRequests(mux)
 }
 
