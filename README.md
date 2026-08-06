@@ -67,7 +67,28 @@ Design notes:
 - **FlatConfig trap** — harper-ls treats linter rules not listed in config as disabled,
   so the full rule map from `harper-cli config` is always sent.
 
-## Systemd (user service)
+## Portable bundle (any platform)
+
+The `grammar-server` binary finds harper-ls/cli in its own directory first,
+then falls back to PATH. For portable use, bundle them together:
+
+```bash
+make bundle-linux-amd64
+# → dist/linux-amd64/grammar-server + harper-ls + harper-cli
+
+# Cross-compile for other targets:
+make bundle-windows-amd64 HARPER_DIR=./harper-win64
+make bundle-darwin-arm64  HARPER_DIR=./harper-macos
+
+# Run (any OS):
+unzip grammar-server-linux-amd64.zip
+cd grammar-server-linux-amd64
+./grammar-server --port 8875
+```
+
+On Linux, `make bundle-local` assembles a runnable directory.
+
+## Systemd (user service, Linux)
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -100,5 +121,7 @@ internal/lsp/          LSP client
 internal/engine/       harper-ls engine
 internal/api/          HTTP + LanguageTool mapping
 deployments/systemd/   user unit
-bin/                   built binary (gitignored)
+Makefile               cross-platform build
+dist/                  per-platform portable bundles (gitignored)
+bin/                   local build (gitignored)
 ```

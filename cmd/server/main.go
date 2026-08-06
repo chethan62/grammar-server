@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"grammar-server/internal/api"
-	"grammar-server/internal/binaries"
 	"grammar-server/internal/config"
 	"grammar-server/internal/engine"
 )
@@ -43,17 +42,8 @@ func main() {
 		cfg.Harper = *harper
 	}
 	if cfg.Harper == "harper-ls" {
-		// Use self-contained embedded binaries if available; fall back to PATH.
-		binDir, _ := os.UserCacheDir()
-		binDir = filepath.Join(binDir, "grammar-server")
-		ls, cli, err := binaries.Extract(binDir)
-		if err == nil {
-			cfg.Harper = ls
-			// also set CLI bin for the engine's config lookup
-			os.Setenv("HARPER_CLI", cli)
-		} else {
-			log.Printf("embedded binaries unavailable (using system PATH): %v", err)
-		}
+		cfg.Harper = resolveHarper("harper-ls")
+		os.Setenv("HARPER_CLI", resolveHarper("harper-cli"))
 	}
 	if cfg.LogFmt == "json" {
 		log.SetFlags(0)
@@ -104,4 +94,31 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// resolveHarper finds a harper binary: own directory first, then PATH, then
+// the cache directory (old embedded-binary location).
+func resolveHarper(name string) string {
+	// 1. same directory as this binary (portable bundle)
+	exe, _ := os.Executable()
+	if exe != "" {
+		dir := filepath.Dir(exe)
+		if p := filepath.Join(dir, name); fileExists(p) {
+			return p
+		}
+	}
+	// 2. user cache (old embedded extraction)
+	cache, _ := os.UserCacheDir()
+	if cache != "" {
+		if p := filepath.Join(cache, "grammar-server", name); fileExists(p) {
+			return p
+		}
+	}
+	// 3. system PATH
+	return name
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
