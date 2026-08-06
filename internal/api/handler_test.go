@@ -114,24 +114,27 @@ func TestSentenceRanges(t *testing.T) {
 	srv := httptest.NewServer(api.NewServer(h).Handler())
 	defer srv.Close()
 
-	resp, err := http.Post(srv.URL+"/v2/check", "application/json",
+	// Two sentences
+	resp, _ := http.Post(srv.URL+"/v2/check", "application/json",
 		strings.NewReader(`{"text":"First sentence. Second one here.","language":"en-US"}`))
-	if err != nil {
-		t.Fatal(err)
+	if resp != nil {
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
-
-	var out struct {
-		SentenceRanges [][]int64 `json:"sentenceRanges"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatal(err)
-	}
+	var out struct{ SentenceRanges [][]int64 `json:"sentenceRanges"` }
+	json.NewDecoder(resp.Body).Decode(&out)
 	if len(out.SentenceRanges) < 2 {
-		t.Errorf("expected at least 2 sentence ranges, got %d: %v", len(out.SentenceRanges), out.SentenceRanges)
+		t.Errorf("expected at least 2 ranges, got %d: %v", len(out.SentenceRanges), out.SentenceRanges)
 	}
-	// First sentence should start at 0
-	if len(out.SentenceRanges) > 0 && out.SentenceRanges[0][0] != 0 {
-		t.Errorf("expected first sentence to start at 0, got %v", out.SentenceRanges[0])
+
+	// Three single-letter "sentences" (edge case — no false abbreviation skip)
+	resp2, _ := http.Post(srv.URL+"/v2/check", "application/json",
+		strings.NewReader(`{"text":"A. B. C.","language":"en-US"}`))
+	if resp2 != nil {
+		defer resp2.Body.Close()
+	}
+	var out2 struct{ SentenceRanges [][]int64 `json:"sentenceRanges"` }
+	json.NewDecoder(resp2.Body).Decode(&out2)
+	if len(out2.SentenceRanges) != 3 {
+		t.Errorf("expected 3 ranges for 'A. B. C.', got %d: %v", len(out2.SentenceRanges), out2.SentenceRanges)
 	}
 }

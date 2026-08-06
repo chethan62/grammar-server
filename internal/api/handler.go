@@ -309,10 +309,6 @@ func sentenceRanges(text string) [][]int64 {
 	for i := 0; i < len(text); i++ {
 		c := text[i]
 		if c == '.' || c == '!' || c == '?' {
-			// check for abbreviations (single letter followed by dot, like "Dr.")
-			if c == '.' && i > 1 && text[i-1] >= 'A' && text[i-1] <= 'Z' && text[i-2] == ' ' {
-				continue
-			}
 			end := i + 1 // include punctuation
 			// skip trailing space
 			for end < len(text) && text[end] == ' ' {
