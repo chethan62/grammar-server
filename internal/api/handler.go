@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -131,19 +132,26 @@ func langCode(lang string) string {
 	return lang
 }
 
-// Server owns the HTTP handlers and the backing engine.
-type Server struct {
-	eng     *engine.Harper
-	version string
+// Rephraser rewrites a sentence. Implementations may use a local LLM.
+type Rephraser interface {
+	Rephrase(ctx context.Context, sentence string) (string, error)
 }
 
-func NewServer(eng *engine.Harper) *Server {
-	return &Server{eng: eng, version: "0.1.0"}
+// Server owns the HTTP handlers and the backing engine.
+type Server struct {
+	eng       *engine.Harper
+	rephraser Rephraser
+	version   string
+}
+
+func NewServer(eng *engine.Harper, rephraser Rephraser) *Server {
+	return &Server{eng: eng, rephraser: rephraser, version: "0.2.0"}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
+	mux.HandleFunc("/v2/rephrase", s.handleRephrase)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
 	mux.HandleFunc("/status", s.handleRoot)   // old health endpoint
 	mux.HandleFunc("/", s.serveUI)            // single-page UI
@@ -293,4 +301,77 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeError(w http.ResponseWriter, code int, format string, args ...any) {
 	writeJSON(w, code, map[string]any{"error": fmt.Sprintf(format, args...)})
+}
+
+// --- Rephrase ----------------------------------------------------------
+
+// RephraseRequest is the body for /v2/rephrase.
+type RephraseRequest struct {
+	Text   string `json:"text"`
+	Offset int    `json:"offset"` // byte offset of the error to rephrase around
+}
+
+// RephraseResponse is the result from /v2/rephrase.
+type RephraseResponse struct {
+	Rephrased string `json:"rephrased"`
+}
+
+func extractSentence(text string, offset int) string {
+	if offset < 0 || offset >= len(text) {
+		return text
+	}
+	// Find sentence start (previous punctuation or string start)
+	s := offset
+	for s > 0 {
+		c := text[s-1]
+		if c == '.' || c == '!' || c == '?' || c == '\n' {
+			break
+		}
+		s--
+	}
+	// Find sentence end
+	e := offset
+	for e < len(text) {
+		c := text[e]
+		if c == '.' || c == '!' || c == '?' {
+			e++ // include punctuation
+			break
+		}
+		if c == '\n' && e > offset {
+			break
+		}
+		e++
+	}
+	// Trim leading whitespace/punctuation
+	for s < e && (text[s] == ' ' || text[s] == '.' || text[s] == '!' || text[s] == '?') {
+		s++
+	}
+	return text[s:e]
+}
+
+func (s *Server) handleRephrase(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req RephraseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: %v", err)
+		return
+	}
+	if req.Text == "" {
+		writeError(w, http.StatusBadRequest, "'text' is required")
+		return
+	}
+	sentence := extractSentence(req.Text, req.Offset)
+	if s.rephraser != nil {
+		rewritten, err := s.rephraser.Rephrase(r.Context(), sentence)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "rephrase: %v", err)
+			return
+		}
+		writeJSON(w, 200, RephraseResponse{Rephrased: rewritten})
+		return
+	}
+	writeError(w, http.StatusServiceUnavailable, "no rephrase engine configured")
 }

@@ -16,6 +16,7 @@ import (
 	"grammar-server/internal/api"
 	"grammar-server/internal/config"
 	"grammar-server/internal/engine"
+	"grammar-server/internal/ollama"
 )
 
 func main() {
@@ -53,8 +54,18 @@ func main() {
 	}
 	defer h.Close()
 
-	// Build the server.
-	srv := api.NewServer(h)
+	// Build the server, optionally with a local-LLM rephraser.
+	var rephraser api.Rephraser = nil
+	ollamaURL := os.Getenv("OLLAMA_URL")
+	if ollamaURL == "" {
+		ollamaURL = "http://localhost:11434"
+	}
+	model := os.Getenv("GRAMMAR_REPHRASE_MODEL")
+	if model == "" {
+		model = "qwen3.5:4b"
+	}
+	rephraser = ollama.New(ollamaURL, model)
+	srv := api.NewServer(h, rephraser)
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	httpSrv := &http.Server{
 		Addr:         addr,

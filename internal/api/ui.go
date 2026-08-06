@@ -125,6 +125,7 @@ function render(text,matches){
         html+='<button class="rep" data-mi="'+i+'" data-ri="'+j+'">'+esc(m.replacements[j].value)+'</button>';
       html+='</div>';
     }
+    html+='<button class="rep" data-rewrite="'+i+'" style="margin-top:.35rem;background:var(--accent);border-color:var(--accent);color:#fff">'+String.fromCharCode(0x2728)+' Reword sentence</button>';
     html+='</div>';
   }
   resEl.innerHTML=html;
@@ -157,6 +158,9 @@ function copyText(){
 
 resEl.addEventListener('click',function(e){
   var b=e.target.closest('.rep');if(!b)return;
+  if(b.hasAttribute('data-rewrite')){
+    rewordSentence(+b.getAttribute('data-rewrite'));return;
+  }
   applySuggestion(+b.getAttribute('data-mi'),+b.getAttribute('data-ri'));
 });
 ta.addEventListener('input',function(){
@@ -167,6 +171,26 @@ ta.addEventListener('input',function(){
 fetch('/status').then(function(r){return r.json()}).then(function(d){
   document.getElementById('version').textContent='v'+d.version;
 }).catch(function(){});
+
+async function rewordSentence(mi){
+  var m=currentMatches[mi],t=ta.value;if(!m)return;
+  var off=m.offset,s=off;
+  while(s>0&&t[s-1]!='.'&&t[s-1]!='!'&&t[s-1]!='?'&&t[s-1]!='\n')s--;
+  var e=off;
+  while(e<t.length&&t[e]!='.'&&t[e]!='!'&&t[e]!='?'){if(t[e]=='\n'&&e>off)break;e++}
+  if(t[e]=='.'||t[e]=='!'||t[e]=='?')e++;
+  while(s<e&&(t[s]==' '||t[s]=='.'||t[s]=='!'||t[s]=='?'))s++;
+  var sentence=t.slice(s,e);
+  var btn=document.querySelector('[data-rewrite="'+mi+'"]');
+  if(btn){btn.textContent='Rewriting…';btn.disabled=true}
+  try{
+    var r=await fetch('/v2/rephrase',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:t,offset:off})});
+    var d=await r.json();
+    if(d.rephrased){ta.value=t.slice(0,s)+d.rephrased+t.slice(e);run()}
+  }catch(ex){}
+  if(btn){btn.textContent=String.fromCharCode(0x2728)+' Reword sentence';btn.disabled=false}
+}
 
 run();
 </script>
