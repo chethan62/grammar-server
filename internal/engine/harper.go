@@ -5,6 +5,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -108,7 +109,10 @@ func (h *Harper) setConfig(dialect string, disabled []string) error {
 }
 
 func (h *Harper) cliBin() string {
-	// "harper-ls" -> "harper-cli"
+	if cli := os.Getenv("HARPER_CLI"); cli != "" {
+		return cli
+	}
+	// Fallback: "harper-ls" -> "harper-cli"
 	return h.bin[:len(h.bin)-3] + "cli"
 }
 

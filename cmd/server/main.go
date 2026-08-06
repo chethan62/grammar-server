@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"grammar-server/internal/api"
+	"grammar-server/internal/binaries"
 	"grammar-server/internal/config"
 	"grammar-server/internal/engine"
 )
@@ -39,6 +41,19 @@ func main() {
 	}
 	if *harper != "" {
 		cfg.Harper = *harper
+	}
+	if cfg.Harper == "harper-ls" {
+		// Use self-contained embedded binaries if available; fall back to PATH.
+		binDir, _ := os.UserCacheDir()
+		binDir = filepath.Join(binDir, "grammar-server")
+		ls, cli, err := binaries.Extract(binDir)
+		if err == nil {
+			cfg.Harper = ls
+			// also set CLI bin for the engine's config lookup
+			os.Setenv("HARPER_CLI", cli)
+		} else {
+			log.Printf("embedded binaries unavailable (using system PATH): %v", err)
+		}
 	}
 	if cfg.LogFmt == "json" {
 		log.SetFlags(0)
