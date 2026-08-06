@@ -29,6 +29,7 @@ type Harper struct {
 	version  int
 	config   json.RawMessage // {"harper-ls":{...}} full wrapper
 	bin      string
+	dialect  string   // current dialect (for reconnects)
 	dis      []string // disabled rule names (kept for dialect switches)
 }
 
@@ -49,7 +50,7 @@ func NewHarper(bin, dialect string, disabled []string) (*Harper, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &Harper{c: c, bin: bin, dis: disabled}
+	h := &Harper{c: c, bin: bin, dialect: dialect, dis: disabled}
 
 	_, err = c.Request("initialize", map[string]any{
 		"processId":    nil,
@@ -118,6 +119,10 @@ func (h *Harper) cliBin() string {
 
 // SetDialect reconfigures the engine for a different English dialect.
 func (h *Harper) SetDialect(dialect string) error {
+	h.dialect = dialect
+	if err := h.ensureAlive(); err != nil {
+		return err
+	}
 	return h.setConfig(dialect, h.dis)
 }
 
@@ -139,6 +144,10 @@ func (h *Harper) Reconnect() error {
 	if err := c.Notify("initialized", map[string]any{}); err != nil {
 		return err
 	}
+	// Re-push the full config so subsequent checks work
+	if err := h.setConfig(h.dialect, h.dis); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -147,20 +156,32 @@ func (h *Harper) Reconnect() error {
 // If the harper-ls subprocess has crashed, it will be reconnected automatically
 // and the check retried once.
 func (h *Harper) Check(text string) ([]Lint, error) {
+	if err := h.ensureAlive(); err != nil {
+		return nil, err
+	}
 	uri := h.newURI()
 	diags := h.checkDiags(text, uri)
-	if diags == nil {
-		// Transport-level error — attempt reconnect
-		if err := h.Reconnect(); err != nil {
-			return nil, fmt.Errorf("engine: reconnect failed: %w", err)
-		}
-		// Warm up the new process and retry
-		_ = h.checkDiags("warmup", h.newURI())
-		diags = h.checkDiags(text, h.newURI())
-	}
 	l := h.diagsToLints(diags, text)
 	h.enrich(uri, diags, l)
 	return l, nil
+}
+
+// ensureAlive checks whether the LSP connection is healthy, reconnecting if not.
+func (h *Harper) ensureAlive() error {
+	// Quick probe: send a no-op notification (didOpen with empty text).
+	// If the pipe is broken, Reconnect().
+	err := h.c.Notify("textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{
+			"uri":        "file:///tmp/_probe.md",
+			"languageId": "markdown",
+			"version":    1,
+			"text":       "",
+		},
+	})
+	if err != nil {
+		return h.Reconnect()
+	}
+	return nil
 }
 
 // newURI returns a fresh, unique document URI per check.
