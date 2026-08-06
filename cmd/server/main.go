@@ -45,6 +45,9 @@ func main() {
 		cfg.Harper = resolveHarper("harper-ls")
 		os.Setenv("HARPER_CLI", resolveHarper("harper-cli"))
 	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("config: %v", err)
+	}
 	if cfg.LogFmt == "json" {
 		log.SetFlags(0)
 	}

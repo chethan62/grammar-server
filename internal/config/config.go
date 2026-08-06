@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -44,4 +45,21 @@ func Load(path string) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// Validate checks the config values and returns an error if any are invalid.
+func (c Config) Validate() error {
+	if c.Port < 1 || c.Port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535, got %d", c.Port)
+	}
+	validDialects := map[string]bool{
+		"American": true, "British": true, "Canadian": true, "Australian": true, "Indian": true,
+	}
+	if !validDialects[c.Dialect] {
+		return fmt.Errorf("unknown dialect %q (valid: American, British, Canadian, Australian, Indian)", c.Dialect)
+	}
+	if c.LogFmt != "text" && c.LogFmt != "json" {
+		return fmt.Errorf("log_fmt must be 'text' or 'json', got %q", c.LogFmt)
+	}
+	return nil
 }

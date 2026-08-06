@@ -144,9 +144,20 @@ func (h *Harper) Reconnect() error {
 
 // Check lints text and returns matches. Each check uses a unique document URI
 // so diagnostics from concurrent checks can never be cross-matched.
+// If the harper-ls subprocess has crashed, it will be reconnected automatically
+// and the check retried once.
 func (h *Harper) Check(text string) ([]Lint, error) {
 	uri := h.newURI()
 	diags := h.checkDiags(text, uri)
+	if diags == nil {
+		// Transport-level error — attempt reconnect
+		if err := h.Reconnect(); err != nil {
+			return nil, fmt.Errorf("engine: reconnect failed: %w", err)
+		}
+		// Warm up the new process and retry
+		_ = h.checkDiags("warmup", h.newURI())
+		diags = h.checkDiags(text, h.newURI())
+	}
 	l := h.diagsToLints(diags, text)
 	h.enrich(uri, diags, l)
 	return l, nil
