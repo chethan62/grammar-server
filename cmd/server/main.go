@@ -21,7 +21,7 @@ import (
 
 func main() {
 	var (
-		port    = flag.Int("port", 0, "listen port")
+		port    = flag.Int("port", -1, "listen port")
 		dialect = flag.String("dialect", "", "default harper dialect")
 		harper  = flag.String("harper", "", "path to harper-ls binary")
 		cfgPath = flag.String("config", "", "path to YAML config file")
@@ -32,7 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-	if *port > 0 {
+	if *port >= 0 {
 		cfg.Port = *port
 	}
 	if *dialect != "" {
