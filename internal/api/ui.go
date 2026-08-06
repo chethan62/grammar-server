@@ -125,7 +125,7 @@ function render(text,matches){
         html+='<button class="rep" data-mi="'+i+'" data-ri="'+j+'">'+esc(m.replacements[j].value)+'</button>';
       html+='</div>';
     }
-    html+='<button class="rep" data-rewrite="'+i+'" style="margin-top:.35rem;background:var(--accent);border-color:var(--accent);color:#fff">'+String.fromCharCode(0x2728)+' Reword sentence</button>';
+    html+='<button class="rep" data-fix="'+i+'" style="margin-top:.35rem;background:var(--accent);border-color:var(--accent);color:#fff">'+String.fromCharCode(0x270E)+' Fix sentence</button>';
     html+='</div>';
   }
   resEl.innerHTML=html;
@@ -158,8 +158,8 @@ function copyText(){
 
 resEl.addEventListener('click',function(e){
   var b=e.target.closest('.rep');if(!b)return;
-  if(b.hasAttribute('data-rewrite')){
-    rewordSentence(+b.getAttribute('data-rewrite'));return;
+  if(b.hasAttribute('data-fix')){
+    fixSentence(+b.getAttribute('data-fix'));return;
   }
   applySuggestion(+b.getAttribute('data-mi'),+b.getAttribute('data-ri'));
 });
@@ -172,7 +172,7 @@ fetch('/status').then(function(r){return r.json()}).then(function(d){
   document.getElementById('version').textContent='v'+d.version;
 }).catch(function(){});
 
-async function rewordSentence(mi){
+async function fixSentence(mi){
   var m=currentMatches[mi],t=ta.value;if(!m)return;
   var off=m.offset,s=off;
   while(s>0&&t[s-1]!='.'&&t[s-1]!='!'&&t[s-1]!='?'&&t[s-1]!='\n')s--;
@@ -180,16 +180,15 @@ async function rewordSentence(mi){
   while(e<t.length&&t[e]!='.'&&t[e]!='!'&&t[e]!='?'){if(t[e]=='\n'&&e>off)break;e++}
   if(t[e]=='.'||t[e]=='!'||t[e]=='?')e++;
   while(s<e&&(t[s]==' '||t[s]=='.'||t[s]=='!'||t[s]=='?'))s++;
-  var sentence=t.slice(s,e);
-  var btn=document.querySelector('[data-rewrite="'+mi+'"]');
-  if(btn){btn.textContent='Rewriting…';btn.disabled=true}
+  var btn=document.querySelector('[data-fix="'+mi+'"]');
+  if(btn){btn.textContent='Fixing…';btn.disabled=true}
   try{
-    var r=await fetch('/v2/rephrase',{method:'POST',headers:{'Content-Type':'application/json'},
+    var r=await fetch('/v2/fix-sentence',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text:t,offset:off})});
     var d=await r.json();
-    if(d.rephrased){ta.value=t.slice(0,s)+d.rephrased+t.slice(e);run()}
+    if(d.fixed){ta.value=t.slice(0,s)+d.fixed+t.slice(e);run()}
   }catch(ex){}
-  if(btn){btn.textContent=String.fromCharCode(0x2728)+' Reword sentence';btn.disabled=false}
+  if(btn){btn.textContent=String.fromCharCode(0x270E)+' Fix sentence';btn.disabled=false}
 }
 
 run();

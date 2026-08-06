@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -132,26 +131,20 @@ func langCode(lang string) string {
 	return lang
 }
 
-// Rephraser rewrites a sentence. Implementations may use a local LLM.
-type Rephraser interface {
-	Rephrase(ctx context.Context, sentence string) (string, error)
-}
-
 // Server owns the HTTP handlers and the backing engine.
 type Server struct {
-	eng       *engine.Harper
-	rephraser Rephraser
-	version   string
+	eng     *engine.Harper
+	version string
 }
 
-func NewServer(eng *engine.Harper, rephraser Rephraser) *Server {
-	return &Server{eng: eng, rephraser: rephraser, version: "0.2.0"}
+func NewServer(eng *engine.Harper) *Server {
+	return &Server{eng: eng, version: "0.2.0"}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
-	mux.HandleFunc("/v2/rephrase", s.handleRephrase)
+	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
 	mux.HandleFunc("/status", s.handleRoot)   // old health endpoint
 	mux.HandleFunc("/", s.serveUI)            // single-page UI
@@ -303,58 +296,51 @@ func writeError(w http.ResponseWriter, code int, format string, args ...any) {
 	writeJSON(w, code, map[string]any{"error": fmt.Sprintf(format, args...)})
 }
 
-// --- Rephrase ----------------------------------------------------------
-
-// RephraseRequest is the body for /v2/rephrase.
-type RephraseRequest struct {
-	Text   string `json:"text"`
-	Offset int    `json:"offset"` // byte offset of the error to rephrase around
-}
-
-// RephraseResponse is the result from /v2/rephrase.
-type RephraseResponse struct {
-	Rephrased string `json:"rephrased"`
-}
+// --- Sentence helpers -------------------------------------------------
 
 func extractSentence(text string, offset int) string {
 	if offset < 0 || offset >= len(text) {
 		return text
 	}
-	// Find sentence start (previous punctuation or string start)
 	s := offset
-	for s > 0 {
-		c := text[s-1]
-		if c == '.' || c == '!' || c == '?' || c == '\n' {
-			break
-		}
+	for s > 0 && text[s-1] != '.' && text[s-1] != '!' && text[s-1] != '?' && text[s-1] != '\n' {
 		s--
 	}
-	// Find sentence end
 	e := offset
-	for e < len(text) {
-		c := text[e]
-		if c == '.' || c == '!' || c == '?' {
-			e++ // include punctuation
-			break
-		}
-		if c == '\n' && e > offset {
+	for e < len(text) && text[e] != '.' && text[e] != '!' && text[e] != '?' {
+		if text[e] == '\n' && e > offset {
 			break
 		}
 		e++
 	}
-	// Trim leading whitespace/punctuation
+	if e < len(text) && (text[e] == '.' || text[e] == '!' || text[e] == '?') {
+		e++
+	}
 	for s < e && (text[s] == ' ' || text[s] == '.' || text[s] == '!' || text[s] == '?') {
 		s++
 	}
 	return text[s:e]
 }
 
-func (s *Server) handleRephrase(w http.ResponseWriter, r *http.Request) {
+// --- Fix sentence (rule-based, no AI) --------------------------------
+
+// FixSentenceRequest is the body for /v2/fix-sentence.
+type FixSentenceRequest struct {
+	Text   string `json:"text"`
+	Offset int    `json:"offset"` // byte offset of the error; the containing sentence is extracted
+}
+
+// FixSentenceResponse is the result from /v2/fix-sentence.
+type FixSentenceResponse struct {
+	Fixed string `json:"fixed"`
+}
+
+func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	var req RephraseRequest
+	var req FixSentenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: %v", err)
 		return
@@ -364,14 +350,47 @@ func (s *Server) handleRephrase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sentence := extractSentence(req.Text, req.Offset)
-	if s.rephraser != nil {
-		rewritten, err := s.rephraser.Rephrase(r.Context(), sentence)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "rephrase: %v", err)
-			return
-		}
-		writeJSON(w, 200, RephraseResponse{Rephrased: rewritten})
+
+	// Run harper on just the sentence to get lints.
+	lints, err := s.eng.Check(sentence)
+	if err != nil || len(lints) == 0 {
+		writeJSON(w, 200, FixSentenceResponse{Fixed: sentence})
 		return
 	}
-	writeError(w, http.StatusServiceUnavailable, "no rephrase engine configured")
+
+	// Apply first-replacement suggestions back-to-front (offsets stay valid).
+	fixed := applyFixes(sentence, lints)
+	writeJSON(w, 200, FixSentenceResponse{Fixed: fixed})
+}
+
+// applyFixes applies the first replacement of each lint to the text,
+// processing from the end so earlier offsets remain valid.
+func applyFixes(text string, lints []engine.Lint) string {
+	// Sort back-to-front by offset
+	sorted := make([]engine.Lint, len(lints))
+	copy(sorted, lints)
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].CharStart > sorted[i].CharStart {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+	out := []byte(text)
+	for i := range sorted {
+		l := &sorted[i]
+		if len(l.Replacements) == 0 || l.CharStart < 0 || l.CharEnd > len(out) {
+			continue
+		}
+		rep := l.Replacements[0]
+		// Convert UTF-16 offsets to byte offsets (both are equivalent for ASCII/BMP)
+		// CharStart/CharEnd are UTF-16 units; for the single-sentence context and
+		// English, these match byte positions.
+		start, end := l.CharStart, l.CharEnd
+		if start > end || start > len(out) {
+			continue
+		}
+		out = append(out[:start], append([]byte(rep), out[end:]...)...)
+	}
+	return string(out)
 }

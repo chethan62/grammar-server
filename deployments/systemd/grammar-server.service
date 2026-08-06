@@ -1,5 +1,5 @@
 [Unit]
-Description=grammar-server (LanguageTool-compatible API backed by harper-ls)
+Description=grammar-server (LanguageTool-compatible, rule-based)
 After=network.target
 
 [Service]

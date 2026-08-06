@@ -1,5 +1,5 @@
 // Command server is a LanguageTool-compatible grammar-checking HTTP server
-// backed by harper-ls (offline, privacy-first).
+// backed by harper-ls (offline, privacy-first). No AI/LLM — pure rule-based.
 package main
 
 import (
@@ -16,11 +16,9 @@ import (
 	"grammar-server/internal/api"
 	"grammar-server/internal/config"
 	"grammar-server/internal/engine"
-	"grammar-server/internal/ollama"
 )
 
 func main() {
-	// CLI flags — override config file values.
 	var (
 		port    = flag.Int("port", 0, "listen port")
 		dialect = flag.String("dialect", "", "default harper dialect")
@@ -29,7 +27,6 @@ func main() {
 	)
 	flag.Parse()
 
-	// Load config (defaults → file → flags).
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -44,28 +41,16 @@ func main() {
 		cfg.Harper = *harper
 	}
 	if cfg.LogFmt == "json" {
-		log.SetFlags(0) // structured JSON log lines
+		log.SetFlags(0)
 	}
 
-	// Start the harper-ls engine.
 	h, err := engine.NewHarper(cfg.Harper, cfg.Dialect, nil)
 	if err != nil {
 		log.Fatalf("engine: %v", err)
 	}
 	defer h.Close()
 
-	// Build the server, optionally with a local-LLM rephraser.
-	var rephraser api.Rephraser = nil
-	ollamaURL := os.Getenv("OLLAMA_URL")
-	if ollamaURL == "" {
-		ollamaURL = "http://localhost:11434"
-	}
-	model := os.Getenv("GRAMMAR_REPHRASE_MODEL")
-	if model == "" {
-		model = "qwen3.5:4b"
-	}
-	rephraser = ollama.New(ollamaURL, model)
-	srv := api.NewServer(h, rephraser)
+	srv := api.NewServer(h)
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	httpSrv := &http.Server{
 		Addr:         addr,
@@ -76,10 +61,8 @@ func main() {
 	}
 	log.Printf("grammar-server listening on %s (harper-ls: %s, dialect: %s)", addr, cfg.Harper, cfg.Dialect)
 
-	// Graceful shutdown.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
 	go func() {
 		<-ctx.Done()
 		log.Printf("shutting down gracefully (timeout 10s)…")
@@ -89,14 +72,12 @@ func main() {
 			log.Printf("shutdown error: %v", err)
 		}
 	}()
-
 	if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("listen: %v", err)
 	}
 	log.Println("server stopped")
 }
 
-// corsMiddleware adds permissive CORS headers for local use.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
