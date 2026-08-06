@@ -218,10 +218,12 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			continue
 		}
 		ctx := buildContext(req.Text, l.CharStart, l.CharEnd)
+		seen := map[string]bool{}
 		reps := make([]Replacement, 0, len(l.Replacements))
 		for _, rep := range l.Replacements {
-			if rep != "" {
+			if rep != "" && !seen[rep] {
 				reps = append(reps, Replacement{Value: rep})
+				seen[rep] = true
 			}
 		}
 		matches = append(matches, Match{
@@ -245,8 +247,9 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			BuildDate: time.Now().UTC().Format(time.RFC3339),
 			APIVersion: 2, Status: "OK",
 		},
-		Language: LangInfo{Name: langName(req.Language), Code: langCode(req.Language)},
-		Matches:  matches,
+		Language:       LangInfo{Name: langName(req.Language), Code: langCode(req.Language)},
+		Matches:        matches,
+		SentenceRanges: sentenceRanges(req.Text),
 	}
 }
 
@@ -297,6 +300,81 @@ func writeError(w http.ResponseWriter, code int, format string, args ...any) {
 }
 
 // --- Sentence helpers -------------------------------------------------
+
+// sentenceRanges splits text into sentences and returns UTF-16 code unit
+// offset pairs [start, end) for each sentence.
+func sentenceRanges(text string) [][]int64 {
+	var out [][]int64
+	start := 0
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if c == '.' || c == '!' || c == '?' {
+			// check for abbreviations (single letter followed by dot, like "Dr.")
+			if c == '.' && i > 1 && text[i-1] >= 'A' && text[i-1] <= 'Z' && text[i-2] == ' ' {
+				continue
+			}
+			end := i + 1 // include punctuation
+			// skip trailing space
+			for end < len(text) && text[end] == ' ' {
+				end++
+			}
+			out = append(out, []int64{int64(u16Offset(text, start)), int64(u16Offset(text, end))})
+			start = end
+			i = end - 1 // skip ahead
+		} else if c == '\n' && i+1 < len(text) && text[i+1] == '\n' {
+			end := i + 1
+			out = append(out, []int64{int64(u16Offset(text, start)), int64(u16Offset(text, end))})
+			start = end
+			i = end - 1
+		}
+	}
+	// trailing text after last punctuation
+	if start < len(text) {
+		end := len(text)
+		for end > start && (text[end-1] == ' ' || text[end-1] == '\n') {
+			end--
+		}
+		if end > start {
+			out = append(out, []int64{int64(u16Offset(text, start)), int64(u16Offset(text, end))})
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, []int64{0, int64(u16Len(text))})
+	}
+	return out
+}
+
+// u16Len returns the UTF-16 code unit length of a string.
+func u16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		if r > 0xFFFF {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
+// u16Offset returns the UTF-16 code unit offset of the byte position in text.
+func u16Offset(text string, byteOff int) int {
+	n := 0
+	for _, r := range text {
+		if n >= byteOff {
+			break
+		}
+		if r > 0xFFFF {
+			n += 2
+		} else {
+			n++
+		}
+		if n > byteOff {
+			break // partial rune (shouldn't happen with ASCII)
+		}
+	}
+	return n
+}
 
 func extractSentence(text string, offset int) string {
 	if offset < 0 || offset >= len(text) {

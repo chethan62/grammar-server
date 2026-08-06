@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Install harper
+        run: |
+          curl -fsSL https://github.com/Automattic/harper/releases/download/v2.7.0/harper-linux-x86_64.tar.gz | tar xz
+          sudo mv harper-ls harper-cli /usr/local/bin/
+      - run: go vet ./...
+      - run: go test -v -timeout 60s ./internal/api/
+      - run: go build -o grammar-server ./cmd/server

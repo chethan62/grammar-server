@@ -124,6 +124,24 @@ func (h *Harper) SetDialect(dialect string) error {
 // Close terminates the harper-ls subprocess.
 func (h *Harper) Close() { h.c.Stop() }
 
+// Reconnect restarts the harper-ls subprocess if it has crashed.
+func (h *Harper) Reconnect() error {
+	h.c.Stop()
+	c, err := lsp.Start(h.bin, "--stdio")
+	if err != nil {
+		return fmt.Errorf("reconnect: %w", err)
+	}
+	h.c = c
+	_, err = c.Request("initialize", map[string]any{"processId": nil, "capabilities": map[string]any{}, "rootUri": "file:///tmp"})
+	if err != nil {
+		return err
+	}
+	if err := c.Notify("initialized", map[string]any{}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Check lints text and returns matches. Each check uses a unique document URI
 // so diagnostics from concurrent checks can never be cross-matched.
 func (h *Harper) Check(text string) ([]Lint, error) {
