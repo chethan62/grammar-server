@@ -1,16 +1,31 @@
 package api_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"grammar-server/internal/api"
 	"grammar-server/internal/engine"
 )
+
+// checkMatch is the subset of a LanguageTool match the tests assert on.
+type checkMatch struct {
+	Rule struct {
+		ID string `json:"id"`
+	} `json:"rule"`
+	Offset       int64 `json:"offset"`
+	Length       int64 `json:"length"`
+	Replacements []struct {
+		Value string `json:"value"`
+	} `json:"replacements"`
+}
 
 func TestCheckMisspelling(t *testing.T) {
 	h, err := engine.NewHarper("harper-ls", "American", nil)
@@ -136,5 +151,88 @@ func TestSentenceRanges(t *testing.T) {
 	json.NewDecoder(resp2.Body).Decode(&out2)
 	if len(out2.SentenceRanges) != 3 {
 		t.Errorf("expected 3 ranges for 'A. B. C.', got %d: %v", len(out2.SentenceRanges), out2.SentenceRanges)
+	}
+}
+
+// newTestServer starts a server backed by harper-ls, or skips the test if the
+// binary is unavailable.
+func newTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	h, err := engine.NewHarper("harper-ls", "American", nil)
+	if err != nil {
+		t.Skipf("harper-ls not available: %v", err)
+	}
+	t.Cleanup(h.Close)
+	srv := httptest.NewServer(api.NewServer(h).Handler())
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func postCheck(url, text string) ([]checkMatch, error) {
+	body, err := json.Marshal(map[string]string{"text": text, "language": "en-US"})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.Post(url+"/v2/check", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Matches []checkMatch `json:"matches"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out.Matches, nil
+}
+
+// Regression: multi-line documents used to return matches with empty
+// replacements, because the codeAction request was built as
+// {line: 0, character: <flat offset>} instead of the diagnostic's real
+// line/character position.
+func TestMultiLineReplacements(t *testing.T) {
+	srv := newTestServer(t)
+	matches, err := postCheck(srv.URL,
+		"First line is fine.\nSecond line has a misspeled wurd here.\nThird line teh.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) < 3 {
+		t.Fatalf("expected at least 3 matches, got %d", len(matches))
+	}
+	for _, m := range matches {
+		if len(m.Replacements) == 0 {
+			t.Errorf("rule %s at offset %d returned no replacements", m.Rule.ID, m.Offset)
+		}
+	}
+}
+
+// Regression: concurrent checks used to drop each other's publishDiagnostics
+// (shared channel, per-URI filtering), so most parallel requests came back
+// with zero matches.
+func TestConcurrentChecks(t *testing.T) {
+	srv := newTestServer(t)
+
+	const n = 10
+	var wg sync.WaitGroup
+	results := make([]int, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			matches, err := postCheck(srv.URL, fmt.Sprintf("this is teh %d misspeled wurd", i))
+			if err != nil {
+				t.Errorf("request %d: %v", i, err)
+				return
+			}
+			results[i] = len(matches)
+		}(i)
+	}
+	wg.Wait()
+	for i, got := range results {
+		if got < 3 {
+			t.Errorf("request %d: expected at least 3 matches, got %d", i, got)
+		}
 	}
 }

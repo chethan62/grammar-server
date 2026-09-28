@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"grammar-server/internal/lsp"
@@ -21,16 +22,28 @@ type Lint struct {
 	CharStart    int      `json:"charStart"` // UTF-16 code unit offset in full text
 	CharEnd      int      `json:"charEnd"`
 	Replacements []string `json:"replacements"`
+
+	// LSP position of the finding (line/character in UTF-16 code units).
+	// Kept so codeAction requests address the real location: a flat offset
+	// replayed as {line: 0, character: N} is only valid for single-line text.
+	StartLine, StartChar int
+	EndLine, EndChar     int
 }
 
 // Harper wraps a single persistent harper-ls --stdio process.
 type Harper struct {
-	c        *lsp.Client
-	version  int
-	config   json.RawMessage // {"harper-ls":{...}} full wrapper
-	bin      string
-	dialect  string   // current dialect (for reconnects)
-	dis      []string // disabled rule names (kept for dialect switches)
+	// mu serializes whole check cycles (didOpen → publishDiagnostics →
+	// codeAction). Concurrent checks would otherwise race on the shared
+	// Notifications channel: each waiter only accepts diagnostics for its own
+	// URI and drops every other publish, so the owner of a dropped publish
+	// blocks until timeout and returns zero matches.
+	mu      sync.Mutex
+	c       *lsp.Client
+	version int
+	config  json.RawMessage // {"harper-ls":{...}} full wrapper
+	bin     string
+	dialect string   // current dialect (for reconnects)
+	dis     []string // disabled rule names (kept for dialect switches)
 }
 
 var kindMap = map[string]string{
@@ -119,6 +132,11 @@ func (h *Harper) cliBin() string {
 
 // SetDialect reconfigures the engine for a different English dialect.
 func (h *Harper) SetDialect(dialect string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if dialect == h.dialect {
+		return nil // already configured; skip a redundant didChangeConfiguration
+	}
 	h.dialect = dialect
 	if err := h.ensureAlive(); err != nil {
 		return err
@@ -156,6 +174,8 @@ func (h *Harper) Reconnect() error {
 // If the harper-ls subprocess has crashed, it will be reconnected automatically
 // and the check retried once.
 func (h *Harper) Check(text string) ([]Lint, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if err := h.ensureAlive(); err != nil {
 		return nil, err
 	}
@@ -317,6 +337,10 @@ func (h *Harper) diagsToLints(diags []json.RawMessage, text string) []Lint {
 			Message:   diag.Message,
 			CharStart: start,
 			CharEnd:   end,
+			StartLine: diag.Range.Start.Line,
+			StartChar: diag.Range.Start.Character,
+			EndLine:   diag.Range.End.Line,
+			EndChar:   diag.Range.End.Character,
 		})
 	}
 	return out
@@ -360,12 +384,14 @@ func utf16Len(r rune) int {
 	return 1
 }
 
-// rangeMap builds an LSP range for the lint (single line assumed for simplicity;
-// harper reports within-line spans so this is exact for typical input).
+// rangeMap builds an LSP range for the lint from its real line/character
+// position. Deriving this from the flat UTF-16 offset as {line: 0, ...} breaks
+// on any multi-line document: harper-ls looks up a position that does not
+// exist and returns no code actions, so replacements come back empty.
 func (l *Lint) rangeMap() map[string]any {
 	return map[string]any{
-		"start": map[string]any{"line": 0, "character": l.CharStart},
-		"end":   map[string]any{"line": 0, "character": l.CharEnd},
+		"start": map[string]any{"line": l.StartLine, "character": l.StartChar},
+		"end":   map[string]any{"line": l.EndLine, "character": l.EndChar},
 	}
 }
 
