@@ -393,8 +393,17 @@ loop:
 	return diags, nil
 }
 
-// enrich fetches codeAction suggestions for each diagnostic (harper-ls returns
-// actions for one diagnostic per query, so we query per-lint).
+// enrich fetches codeAction suggestions for each diagnostic.
+//
+// Two measured facts, so nobody has to re-run the experiment:
+//
+//   - One request covering the whole document returns **zero** actions: harper-ls
+//     answers codeAction only for the range it is handed, so the queries must be
+//     per-diagnostic.
+//   - Those round trips are not latency-bound, they are harper-side work: eight-way
+//     concurrent requests measure the same as sequential ones (52 ms for ten lints,
+//     warm, either way). So this stays a plain loop; the thread pool would be
+//     complexity with no gain. Ten lints cost 52-87 ms of which ~two thirds is here.
 func (h *Harper) enrich(uri string, diags []json.RawMessage, lints []Lint) {
 	for i := range lints {
 		d := &lints[i]

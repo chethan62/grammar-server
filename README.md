@@ -97,6 +97,12 @@ Design notes:
 - **Localhost by default** — `--host 0.0.0.0` to expose it deliberately.
 - **Unique URI per check** — harper-ls publishes diagnostics tagged by document URI;
   reusing one URI lets concurrent checks cross-match stale publishes (was a real bug).
+- **A check is the linter plus one codeAction per match** — harper-ls answers `codeAction`
+  only for the range it is handed (one whole-document request returns **zero** actions), so
+  suggestions cost one round trip per match: ~20 ms of linter work plus ~5 ms per match
+  (measured: ten matches = 52-87 ms, two thirds of it codeAction). Sending those requests
+  eight-way in parallel measures the same as sequential, so they are not latency-bound and
+  the loop stays a loop.
 - **Checks are serialized by design** — one harper-ls behind one mutex. Measured here with
   65-word documents at `level=picky`: p50 62 ms / p95 102 ms with one request in flight,
   p95 ≤ 190 ms at 4 in flight, ~20 checks/s aggregate with 96 requests at 32 in flight, and
