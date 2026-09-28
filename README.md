@@ -83,10 +83,12 @@ Design notes:
   once, so one bad request is slow rather than every later request being a 500.
 - **Documents are closed after each check** — harper-ls re-lints every open document
   on a configuration change, so leaving them open made toggles slower and fatter.
-- **Style hints are opt-in** — `level=picky` or `enabledCategories=[STYLE]`. They carry
-  LanguageTool's ids (`WORDINESS` is ours, `PASSIVE_VOICE_SIMPLE` is theirs) so clients
-  render them unchanged. The passive hint deliberately carries **no** replacement:
-  guessing the actor ships wrong fixes.
+- **Style hints are opt-in** — `level=picky` or `enabledCategories=[STYLE]`. Three
+  deterministic, offline passes: `WORDINESS` (33 wordy phrases → the concise form) and
+  `PREFERRED_TERM` (10 non-preferred forms → the house-style one: e-mail → email, whilst →
+  while) are ours, `PASSIVE_VOICE_SIMPLE` is LanguageTool's own id, so clients render all
+  three unchanged. Both of ours suggest a replacement; the passive hint deliberately carries
+  **none**: guessing the actor ships wrong fixes.
 - **Localhost by default** — `--host 0.0.0.0` to expose it deliberately.
 - **Unique URI per check** — harper-ls publishes diagnostics tagged by document URI;
   reusing one URI lets concurrent checks cross-match stale publishes (was a real bug).

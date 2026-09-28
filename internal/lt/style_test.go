@@ -54,6 +54,64 @@ func TestInflectionsAreNotTouched(t *testing.T) {
 	}
 }
 
+// The variant table has the same contract as the wordiness one: every entry
+// fires, is replaced by the preferred form, and reports as PreferredTerm. Both
+// forms are correct English, so it is a hint carrying a suggestion, and the
+// message must name the form actually found.
+func TestEveryVariantEntryFires(t *testing.T) {
+	for phrase, want := range variants {
+		text := "We should use " + phrase + " here."
+		findings := StyleFindings(text)
+		if len(findings) != 1 {
+			t.Errorf("%q: %d findings, want exactly 1 (%+v)", phrase, len(findings), findings)
+			continue
+		}
+		f := findings[0]
+		if f.Rule != "PreferredTerm" {
+			t.Errorf("%q: rule = %q, want PreferredTerm", phrase, f.Rule)
+		}
+		if got := runeSlice(text, f); got != phrase {
+			t.Errorf("%q: covered %q", phrase, got)
+		}
+		if len(f.Replacements) != 1 || f.Replacements[0] != want {
+			t.Errorf("%q: replacements = %v, want [%q]", phrase, f.Replacements, want)
+		}
+		if !strings.Contains(f.Message, want) {
+			t.Errorf("%q: message %q does not name the preferred form %q", phrase, f.Message, want)
+		}
+	}
+}
+
+// The preferred form must stay quiet, or the hint argues with itself.
+func TestPreferredFormsAreNotFlagged(t *testing.T) {
+	for _, text := range []string{
+		"Send an email today.",
+		"Our website is live.",
+		"Buy it online.",
+		"We cooperate on that.",
+		"We cannot start yet.",
+		"Please choose a username.",
+		"while we wait",
+		"among the team",
+		"different from that",
+		"regarding your note",
+	} {
+		if f := StyleFindings(text); len(f) != 0 {
+			t.Errorf("%q: %+v, want no findings", text, f)
+		}
+	}
+}
+
+// One phrase in both tables would report the same word twice, and the client
+// would show two cards for one hit.
+func TestPhraseTablesDoNotOverlap(t *testing.T) {
+	for phrase := range variants {
+		if _, dup := wordy[phrase]; dup {
+			t.Errorf("%q is in both wordy and variants", phrase)
+		}
+	}
+}
+
 func TestPassiveVoice(t *testing.T) {
 	hits := map[string]string{
 		"The report was written by the team.": "was written",

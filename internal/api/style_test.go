@@ -106,6 +106,61 @@ func TestStyleHintsCanBeDisabled(t *testing.T) {
 	}
 }
 
+// A preferred-term hint is our own machinery, so the two things that can break
+// are the mapping to a LanguageTool id and the tier gate: STYLE under level=picky,
+// invisible to a client that asked for correctness alone, and disable-able by
+// either the LanguageTool id or our rule name.
+func TestPreferredTermHint(t *testing.T) {
+	srv := newTestServer(t)
+	const text = "Please e-mail the report to me."
+
+	for _, tc := range []struct {
+		name, body string
+		want       int
+	}{
+		{"default level hides it", `{"text":"` + text + `","language":"en-US"}`, 0},
+		{"level=picky shows it", `{"text":"` + text + `","language":"en-US","level":"picky"}`, 1},
+		{"disabled by id", `{"text":"` + text + `","language":"en-US","level":"picky","disabledRules":["PREFERRED_TERM"]}`, 0},
+		{"disabled by name", `{"text":"` + text + `","language":"en-US","level":"picky","disabledRules":["PreferredTerm"]}`, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, out := postCheckJSON(t, srv.URL, tc.body)
+			resp.Body.Close()
+
+			var count int
+			var issueType, catID, repl string
+			var offset, length int64
+			for _, m := range out.Matches {
+				if m.Rule.ID != "PREFERRED_TERM" {
+					continue
+				}
+				count++
+				issueType, catID = m.Rule.IssueType, m.Rule.Category.ID
+				offset, length = m.Offset, m.Length
+				if len(m.Replacements) > 0 {
+					repl = m.Replacements[0].Value
+				}
+			}
+			if count != tc.want {
+				t.Fatalf("%d PREFERRED_TERM matches, want %d: %+v", count, tc.want, out.Matches)
+			}
+			if count == 0 {
+				return
+			}
+			if issueType != "style" || catID != "STYLE" {
+				t.Errorf("presentation = issueType %q category %q, want style / STYLE", issueType, catID)
+			}
+			// "Please e-mail ...": the hint covers just the form, not the sentence.
+			if offset != 7 || length != 6 {
+				t.Errorf(`offset/length = %d/%d, want 7/6 ("e-mail")`, offset, length)
+			}
+			if repl != "email" {
+				t.Errorf("replacement = %q, want %q", repl, "email")
+			}
+		})
+	}
+}
+
 // Offsets are UTF-16 code units, like every other match. A rune-offset slip
 // shows up here: 😀 is one rune but two UTF-16 units, so the hint after it starts
 // at 3, not 2.

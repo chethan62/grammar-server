@@ -47,17 +47,22 @@ var harperToLT = map[string]ltRule{
 		IssueType: "style", Category: Category{ID: "REDUNDANCY", Name: "Redundant Phrases"},
 		TypeName: "Hint",
 	},
-	// The two entries below are not harper rules: they come from internal/lt's
+	// The three entries below are not harper rules: they come from internal/lt's
 	// deterministic style pass (internal/api/style.go). The passive id and its
 	// STYLE/issueType=style presentation are LanguageTool's own — its picky level
 	// reports PASSIVE_VOICE_SIMPLE — while LanguageTool has no wordiness rule for
-	// these phrases, so WORDINESS is ours.
+	// these phrases, so WORDINESS is ours, as is PREFERRED_TERM (no cloud checker
+	// flags a house-style preference offline; that is the point of having it).
 	"Wordiness": {
 		ID: "WORDINESS", Description: "Wordy phrase", Short: "Wordiness",
 		IssueType: "style", Category: Category{ID: "STYLE", Name: "Style"}, TypeName: "Hint",
 	},
 	"PassiveVoice": {
 		ID: "PASSIVE_VOICE_SIMPLE", Description: "Passive voice", Short: "Passive voice",
+		IssueType: "style", Category: Category{ID: "STYLE", Name: "Style"}, TypeName: "Hint",
+	},
+	"PreferredTerm": {
+		ID: "PREFERRED_TERM", Description: "Non-preferred form", Short: "Preferred term",
 		IssueType: "style", Category: Category{ID: "STYLE", Name: "Style"}, TypeName: "Hint",
 	},
 }
@@ -127,7 +132,9 @@ var ltToHarper = map[string]string{
 
 // styleRuleIDs are ours, not harper's: internal/lt produces them, so they must
 // never be handed to the engine as linter names.
-var styleRuleIDs = map[string]bool{"WORDINESS": true, "PASSIVE_VOICE_SIMPLE": true}
+var styleRuleIDs = map[string]bool{
+	"WORDINESS": true, "PASSIVE_VOICE_SIMPLE": true, "PREFERRED_TERM": true,
+}
 
 // harperRuleNames resolves a client rule list into harper rule names. LanguageTool
 // ids are translated; anything else passes through unchanged, which is how a
