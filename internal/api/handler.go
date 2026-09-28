@@ -173,7 +173,7 @@ type Server struct {
 }
 
 func NewServer(eng *engine.Harper) *Server {
-	return &Server{eng: eng, version: "0.3.0"}
+	return &Server{eng: eng, version: "0.4.0"}
 }
 
 func (s *Server) Handler() http.Handler {

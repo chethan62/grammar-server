@@ -135,14 +135,23 @@ cd grammar-server-linux-amd64
 
 On Linux, `make bundle-local` assembles a runnable directory.
 
-## Systemd (user service, Linux)
+## Install (Linux, current user)
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp deployments/systemd/grammar-server.service ~/.config/systemd/user/
-systemctl --user daemon-reload
+make install
 systemctl --user enable --now grammar-server
 ```
+
+That builds the binary, puts it in `~/.local/bin`, installs the user unit (which
+references only `%h/.local/bin/grammar-server`, never this source tree) and reloads
+systemd. `make uninstall` reverses it. Without systemd, the same build is:
+
+```bash
+make            # ./grammar-server
+./grammar-server --port 8875 --dialect American
+```
+
+harper-ls is looked up on `PATH`, then beside the binary, then `--harper /path/to/harper-ls`.
 
 ## Clients
 
@@ -152,6 +161,11 @@ systemctl --user enable --now grammar-server
 | Neovim (ltex-ls / null-ls) | point `ltex-ls` at the server |
 | Firefox/Chrome LT extension | settings → custom server URL |
 | LibreOffice | LT extension → custom server |
+| [grammar-ui](https://github.com/chethan62/grammar-ui) | static page; set its API base to this origin |
+
+LTeX and the LT extensions send the correctness tier only, so they will not show
+the style hints — those need `level: "picky"` (or `enabledCategories: ["STYLE"]`) in
+the request, which is what grammar-ui and the curl examples below do.
 
 ## Limitations
 
@@ -163,6 +177,8 @@ systemctl --user enable --now grammar-server
 - `rule.urls` and `contextForSureMatch` are not populated.
 
 ## Layout
+
+MIT licensed (see `LICENSE`); harper and harper-ls are Apache-2.0 and are not bundled here.
 
 ```
 cmd/server/            entrypoint

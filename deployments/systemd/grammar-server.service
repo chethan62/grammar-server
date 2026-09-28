@@ -4,7 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart="%h/Documents/Default Project/grammar-server/bin/grammar-server" --port 8875 --dialect American
+# Binary installed by `make install` (no sudo, no hardcoded source tree). harper-ls
+# is found on PATH or beside the binary.
+ExecStart=%h/.local/bin/grammar-server --port 8875 --dialect American
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
