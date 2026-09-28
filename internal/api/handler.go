@@ -212,6 +212,10 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "engine error: %v", err)
 		return
 	}
+	// The engine has no rule for wordiness or passive voice (see
+	// internal/lt/style.go); add those hints here so they travel through the same
+	// rule mapping, replacements and disabledRules filtering as everything else.
+	lints = withStyleLints(req.Text, lints)
 
 	resp := s.buildResponse(req, lints)
 	writeJSON(w, 200, resp)

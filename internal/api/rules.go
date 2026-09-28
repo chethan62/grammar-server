@@ -52,6 +52,19 @@ var harperToLT = map[string]ltRule{
 		IssueType: "style", Category: Category{ID: "REDUNDANCY", Name: "Redundant Phrases"},
 		TypeName: "Hint",
 	},
+	// The two entries below are not harper rules: they come from internal/lt's
+	// deterministic style pass (internal/api/style.go). The passive id and its
+	// STYLE/issueType=style presentation are LanguageTool's own — its picky level
+	// reports PASSIVE_VOICE_SIMPLE — while LanguageTool has no wordiness rule for
+	// these phrases, so WORDINESS is ours.
+	"Wordiness": {
+		ID: "WORDINESS", Description: "Wordy phrase", Short: "Wordiness",
+		IssueType: "style", Category: Category{ID: "STYLE", Name: "Style"}, TypeName: "Hint",
+	},
+	"PassiveVoice": {
+		ID: "PASSIVE_VOICE_SIMPLE", Description: "Passive voice", Short: "Passive voice",
+		IssueType: "style", Category: Category{ID: "STYLE", Name: "Style"}, TypeName: "Hint",
+	},
 }
 
 // kindDefaults gives LanguageTool-shaped presentation for any harper rule
