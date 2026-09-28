@@ -172,11 +172,34 @@ func (s *Server) handleLanguages(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// maxTextChars caps a single /v2/check body. Past it the engine's cost is
+// unbounded in practice: a 200 KB document ran >47 s and kept harper-ls at 96%
+// CPU after the client gave up. LanguageTool's own public limit is 20,000
+// characters — we accept 10x that (and chunk above a chunk size later), so
+// anything LT accepts works here too.
+const maxTextChars = 200_000
+
+// writeLTError replies the way LanguageTool does: plain text, "Error: " prefix.
+// Clients show the body to the user as-is, so the shape is part of the contract.
+func writeLTError(w http.ResponseWriter, code int, format string, args ...any) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(code)
+	fmt.Fprintf(w, "Error: %s\n", fmt.Sprintf(format, args...))
+}
+
 func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	// Cheap early exit on a declared huge body; MaxBytesReader still guards a
+	// chunked body that declares nothing.
+	if r.ContentLength > maxTextChars*4+4096 {
+		writeLTError(w, http.StatusRequestEntityTooLarge,
+			"Your text exceeds the limit of %d characters. Please submit a shorter text.", maxTextChars)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxTextChars*4+4096) // 4 bytes/char is generous
 	req, err := parseCheckRequest(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "%v", err)
@@ -184,6 +207,12 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Text == "" {
 		writeError(w, http.StatusBadRequest, "'text' is required")
+		return
+	}
+	if n := len([]rune(req.Text)); n > maxTextChars {
+		writeLTError(w, http.StatusRequestEntityTooLarge,
+			"Your text exceeds the limit of %d characters (it's %d characters). Please submit a shorter text.",
+			maxTextChars, n)
 		return
 	}
 
@@ -510,12 +539,19 @@ func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req FixSentenceRequest
+	r.Body = http.MaxBytesReader(w, r.Body, maxTextChars*4+4096)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: %v", err)
 		return
 	}
 	if req.Text == "" {
 		writeError(w, http.StatusBadRequest, "'text' is required")
+		return
+	}
+	if n := len([]rune(req.Text)); n > maxTextChars {
+		writeLTError(w, http.StatusRequestEntityTooLarge,
+			"Your text exceeds the limit of %d characters (it's %d characters). Please submit a shorter text.",
+			maxTextChars, n)
 		return
 	}
 	sentence := extractSentence(req.Text, req.Offset)
