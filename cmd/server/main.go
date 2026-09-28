@@ -59,6 +59,12 @@ func main() {
 	defer h.Close()
 
 	srv := api.NewServer(h)
+	if cfg.RewriteModel != "" {
+		// Local rewriting for POST /v2/rewrite. Optional by design: with Ollama
+		// stopped, every other endpoint behaves exactly as before.
+		srv.EnableRewrite(cfg.OllamaURL, cfg.RewriteModel)
+		log.Printf("rewriting with %s via %s", cfg.RewriteModel, cfg.OllamaURL)
+	}
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	httpSrv := &http.Server{
 		Addr:         addr,

@@ -11,6 +11,7 @@ import (
 
 	"grammar-server/internal/engine"
 	"grammar-server/internal/lt"
+	"grammar-server/internal/rewrite"
 )
 
 // ruleList accepts both LanguageTool encodings of a rule list: a JSON array
@@ -121,6 +122,10 @@ type Category struct {
 type Server struct {
 	eng     *engine.Harper
 	version string
+
+	// rw is nil unless EnableRewrite attached a local model. Every other
+	// endpoint behaves identically while it is nil, which is the normal case.
+	rw *rewrite.Client
 }
 
 func NewServer(eng *engine.Harper) *Server {
@@ -131,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
+	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
 	mux.HandleFunc("/v2/stats", s.handleStats)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
 	mux.HandleFunc("/status", s.handleRoot) // old health endpoint

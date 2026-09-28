@@ -15,15 +15,29 @@ type Config struct {
 	Dialect string `yaml:"dialect" json:"dialect"`
 	Harper  string `yaml:"harper"  json:"harper"`
 	LogFmt  string `yaml:"log_fmt"  json:"log_fmt"` // "text" or "json"
+
+	// Local rewriting. An empty rewrite_model disables POST /v2/rewrite (it then
+	// answers 503 with instructions); no other endpoint needs a model, and the
+	// server behaves exactly the same with Ollama stopped.
+	OllamaURL    string `yaml:"ollama_url"    json:"ollama_url"`
+	RewriteModel string `yaml:"rewrite_model" json:"rewrite_model"`
 }
 
 // Defaults returns a Config with sensible defaults.
+//
+// rewrite_model is qwen2.5:1.5b on purpose. Measured on this CPU (8 threads, the
+// GPU is capped and unused): 0.9s warm / 6.3s cold per rephrase, against 2.8s
+// warm / 20s cold for qwen3.5:4b. The bigger model reads better and keeps you
+// waiting three times as long; that is a poor trade for a button in a text box.
 func Defaults() Config {
 	return Config{
 		Port:    8875,
 		Dialect: "American",
 		Harper:  "harper-ls",
 		LogFmt:  "text",
+
+		OllamaURL:    "http://127.0.0.1:11434",
+		RewriteModel: "qwen2.5:1.5b",
 	}
 }
 
