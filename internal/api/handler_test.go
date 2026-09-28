@@ -236,3 +236,134 @@ func TestConcurrentChecks(t *testing.T) {
 		}
 	}
 }
+
+// Regression: non-ASCII text mixed byte offsets with UTF-16 code units, so
+// context.text/context.offset did not point at the match, sentenceRanges
+// landed on the wrong boundaries, and fix-sentence corrupted the text.
+//
+// Note on units: the API speaks UTF-16 code units. The test strings below are
+// all BMP (é, ï, etc.), so 1 code unit == 1 rune; slicing by rune is exact.
+
+// unicodeText is long enough that the ±40 context window crops into the
+// multi-byte prefix (é/ï are 2 bytes but 1 UTF-16 unit).
+const unicodeText = "Café naïve résumé Café naïve résumé " +
+	"Café naïve résumé Café naïve résumé misspeled wurd"
+
+func TestUnicodeContext(t *testing.T) {
+	srv := newTestServer(t)
+
+	body, err := json.Marshal(map[string]string{"text": unicodeText, "language": "en-US"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(srv.URL+"/v2/check", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Matches []struct {
+			Offset  int64 `json:"offset"`
+			Length  int64 `json:"length"`
+			Context struct {
+				Text   string `json:"text"`
+				Offset int64  `json:"offset"`
+				Length int64  `json:"length"`
+			} `json:"context"`
+		} `json:"matches"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Matches) < 2 {
+		t.Fatalf("expected at least 2 matches, got %d", len(out.Matches))
+	}
+
+	runes := []rune(unicodeText)
+	for _, m := range out.Matches {
+		// context.text[context.offset:+length] must equal the flagged
+		// slice — this is how LanguageTool clients highlight the error.
+		ctx := []rune(m.Context.Text)
+		start, end := m.Context.Offset, m.Context.Offset+m.Context.Length
+		if start < 0 || end > int64(len(ctx)) {
+			t.Fatalf("context bounds out of range: offset=%d length=%d text=%q",
+				m.Context.Offset, m.Context.Length, m.Context.Text)
+		}
+		got := string(ctx[start:end])
+		if m.Offset < 0 || m.Offset+m.Length > int64(len(runes)) {
+			t.Fatalf("match bounds out of range: offset=%d length=%d", m.Offset, m.Length)
+		}
+		want := string(runes[m.Offset : m.Offset+m.Length])
+		if got != want {
+			t.Errorf("context slice %q != match %q (context text %q)",
+				got, want, m.Context.Text)
+		}
+	}
+}
+
+func TestSentenceRangesUnicode(t *testing.T) {
+	srv := newTestServer(t)
+	text := "Café ici. Naïve there. 😀 Done."
+
+	body, err := json.Marshal(map[string]string{"text": text, "language": "en-US"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(srv.URL+"/v2/check", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		SentenceRanges [][]int64 `json:"sentenceRanges"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+
+	// The splitter attaches the separator space to the preceding sentence.
+	want := [][]int64{{0, 10}, {10, 23}, {23, 31}}
+	if len(out.SentenceRanges) != len(want) {
+		t.Fatalf("got %v, want %v", out.SentenceRanges, want)
+	}
+	for i, r := range out.SentenceRanges {
+		if r[0] != want[i][0] || r[1] != want[i][1] {
+			t.Errorf("range %d = %v, want %v", i, r, want[i])
+		}
+	}
+	// Every range must tile the text (no gaps, ends at UTF-16 length).
+	prev := int64(0)
+	for _, r := range out.SentenceRanges {
+		if r[0] != prev {
+			t.Errorf("range starts at %d, want %d", r[0], prev)
+		}
+		prev = r[1]
+	}
+	if prev != 31 { // utf16 length incl. 😀 = 2 units
+		t.Errorf("last range ends at %d, want 31", prev)
+	}
+}
+
+// TestFixSentenceUnicode ensures replacements don't corrupt preceding
+// multi-byte characters (was: "Café teh" -> "Cafétheh").
+func TestFixSentenceUnicode(t *testing.T) {
+	srv := newTestServer(t)
+	body, err := json.Marshal(map[string]any{"text": "Café teh quick brown fox", "offset": 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(srv.URL+"/v2/fix-sentence", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Fixed string `json:"fixed"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Fixed != "Café the quick brown fox" {
+		t.Errorf("got %q, want %q", out.Fixed, "Café the quick brown fox")
+	}
+}

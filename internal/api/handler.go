@@ -254,7 +254,10 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 }
 
 // buildContext returns a window of text around the match with relative offsets
-// (UTF-16 code units), matching LanguageTool's context field.
+// (UTF-16 code units), matching LanguageTool's context field. The window bounds
+// are UTF-16 offsets and must be converted to byte offsets before slicing:
+// slicing a UTF-8 string at UTF-16 positions cuts mid-rune on non-ASCII text
+// and shifts the reported context.offset.
 func buildContext(text string, start, end int) MatchContext {
 	const radius = 40
 	s := start - radius
@@ -262,11 +265,10 @@ func buildContext(text string, start, end int) MatchContext {
 		s = 0
 	}
 	e := end + radius
-	if e > len(text) {
-		e = len(text)
+	if e > u16Len(text) {
+		e = u16Len(text)
 	}
-	// Trim the window to sensible word boundaries when possible.
-	window := text[s:e]
+	window := text[u16ToByte(text, s):u16ToByte(text, e)]
 	return MatchContext{
 		Text:   window,
 		Offset: int64(start - s),
@@ -353,11 +355,14 @@ func u16Len(s string) int {
 	return n
 }
 
-// u16Offset returns the UTF-16 code unit offset of the byte position in text.
+// u16Offset returns the UTF-16 code unit offset of a byte position in text.
 func u16Offset(text string, byteOff int) int {
+	if byteOff <= 0 {
+		return 0
+	}
 	n := 0
-	for _, r := range text {
-		if n >= byteOff {
+	for i, r := range text {
+		if i >= byteOff {
 			break
 		}
 		if r > 0xFFFF {
@@ -365,11 +370,28 @@ func u16Offset(text string, byteOff int) int {
 		} else {
 			n++
 		}
-		if n > byteOff {
-			break // partial rune (shouldn't happen with ASCII)
-		}
 	}
 	return n
+}
+
+// u16ToByte converts a UTF-16 code unit offset into a byte offset in text,
+// so UTF-16 positions can be used to slice the UTF-8 string safely.
+func u16ToByte(text string, u16off int) int {
+	if u16off <= 0 {
+		return 0
+	}
+	n := 0
+	for i, r := range text {
+		if n >= u16off {
+			return i
+		}
+		if r > 0xFFFF {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return len(text)
 }
 
 func extractSentence(text string, offset int) string {
@@ -453,18 +475,20 @@ func applyFixes(text string, lints []engine.Lint) string {
 	out := []byte(text)
 	for i := range sorted {
 		l := &sorted[i]
-		if len(l.Replacements) == 0 || l.CharStart < 0 || l.CharEnd > len(out) {
+		if len(l.Replacements) == 0 || l.CharStart < 0 {
 			continue
 		}
-		rep := l.Replacements[0]
-		// Convert UTF-16 offsets to byte offsets (both are equivalent for ASCII/BMP)
-		// CharStart/CharEnd are UTF-16 units; for the single-sentence context and
-		// English, these match byte positions.
-		start, end := l.CharStart, l.CharEnd
-		if start > end || start > len(out) {
+		// CharStart/CharEnd are UTF-16 code units; convert to byte offsets
+		// before slicing. Treating them as byte positions corrupts any
+		// non-ASCII text (the bytes of a preceding é shift every boundary).
+		// Processing is back-to-front, so the prefix up to CharStart is
+		// still the original text and the conversion stays valid.
+		start := u16ToByte(string(out), l.CharStart)
+		end := u16ToByte(string(out), l.CharEnd)
+		if start >= end || end > len(out) {
 			continue
 		}
-		out = append(out[:start], append([]byte(rep), out[end:]...)...)
+		out = append(out[:start], append([]byte(l.Replacements[0]), out[end:]...)...)
 	}
 	return string(out)
 }
