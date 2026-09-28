@@ -139,13 +139,26 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
 	mux.HandleFunc("/v2/stats", s.handleStats)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
-	mux.HandleFunc("/status", s.handleRoot) // old health endpoint
-	mux.HandleFunc("/", s.serveUI)          // single-page UI
+	mux.HandleFunc("/status", s.handleRoot)
+	mux.HandleFunc("/", s.handleRoot) // API index: the UI lives in its own repo now
 	return logRequests(mux)
 }
 
+// handleRoot answers /status and / with the service name, version and the
+// endpoints this build serves. It replaced the embedded single-page UI, which
+// moved to its own repository (grammar-ui): the server is API-only now, so any
+// UI — or none — can point at it.
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"service": "grammar-server", "status": "OK", "version": s.version})
+	writeJSON(w, 200, map[string]any{
+		"service": "grammar-server",
+		"status":  "OK",
+		"version": s.version,
+		"endpoints": []string{
+			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
+			"POST /v2/stats", "GET /v2/languages", "GET /status",
+		},
+		"ui": "https://github.com/chethan62/grammar-ui — static; serve it and set its API base to this origin",
+	})
 }
 
 // handleLanguages serves the same table the check path validates against, so

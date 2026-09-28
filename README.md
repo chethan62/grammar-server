@@ -44,7 +44,10 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
 - `language` selects the harper dialect (`en-US` → American, `en-GB` → British, …).
 - `replacements[]` come from harper-ls code actions.
 
-Other endpoints: `GET /` (health), `GET /v2/languages`.
+Other endpoints: `GET /` (an index of the endpoints below — this server is
+API-only now; the UI is a separate static page, [grammar-ui](https://github.com/chethan62/grammar-ui),
+which you point at this origin), `GET /v2/stats` (delivery metrics),
+`GET /v2/languages`, `POST /v2/rewrite` (optional, needs a local Ollama).
 
 ## Architecture
 
