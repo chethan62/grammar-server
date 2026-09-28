@@ -10,7 +10,7 @@ PREFIX ?= $(HOME)/.local
 UNITDIR ?= $(HOME)/.config/systemd/user
 
 # Cross-compile targets
-.PHONY: all bundle clean install uninstall
+.PHONY: all bundle clean install uninstall package
 
 all: $(BIN)
 
@@ -57,6 +57,30 @@ uninstall:
 	-systemctl --user disable --now grammar-server
 	rm -f $(PREFIX)/bin/$(BIN) $(UNITDIR)/grammar-server.service
 	-systemctl --user daemon-reload
+
+# Distribution archive: the server, the harper pair it needs beside it (resolveHarper
+# looks in its own directory first), the units, the UI's static files if the sibling
+# checkout is there, and both licences. Extracted anywhere, it runs with nothing
+# installed and nothing on PATH.
+PKG := dist/$(BIN)-$(VERSION)-linux-amd64
+UIDIR ?= ../grammar-ui
+
+package: $(BIN)
+	@set -e; rm -rf $(PKG); mkdir -p $(PKG)/deployments/systemd
+	cp $(BIN) README.md LICENSE $(PKG)/
+	cp $(HARPER_DIR)/harper-ls $(HARPER_DIR)/harper-cli $(PKG)/
+	cp deployments/systemd/grammar-server.service $(PKG)/deployments/systemd/
+	curl -fsSL https://raw.githubusercontent.com/Automattic/harper/master/LICENSE -o $(PKG)/LICENSE-harper
+	@if [ -d $(UIDIR) ]; then \
+		mkdir -p $(PKG)/ui/deployments/systemd; \
+		cp $(UIDIR)/index.html $(UIDIR)/app.js $(UIDIR)/style.css $(UIDIR)/README.md $(UIDIR)/LICENSE $(PKG)/ui/; \
+		cp $(UIDIR)/deployments/systemd/grammar-ui.service $(PKG)/ui/deployments/systemd/; \
+		echo "  included the UI from $(UIDIR)"; \
+	else \
+		echo "  no UI at $(UIDIR) — archive is server-only"; \
+	fi
+	tar -czf $(PKG).tar.gz -C dist $(notdir $(PKG))
+	@echo "Package: $(PKG).tar.gz"; ls -lh $(PKG).tar.gz; tar -tzf $(PKG).tar.gz | sed 's/^/  /'
 
 clean:
 	rm -rf dist/

@@ -133,7 +133,24 @@ cd grammar-server-linux-amd64
 ./grammar-server --port 8875
 ```
 
-On Linux, `make bundle-local` assembles a runnable directory.
+On Linux, `make bundle-local` assembles a runnable directory, and `make package`
+turns the current checkout into the archive that ships on the
+[releases page](https://github.com/chethan62/grammar-server/releases):
+
+```
+grammar-server-v0.4.0-linux-amd64.tar.gz   (30 MB)
+├── grammar-server  harper-ls  harper-cli  ← no install, no PATH, no network
+├── deployments/systemd/grammar-server.service
+├── ui/                                     ← the UI's three files + its unit
+├── README.md  LICENSE  LICENSE-harper
+```
+
+Extract and run; nothing else has to exist on the machine. Verified by running the
+extracted archive with an empty `HOME` and no `PATH`: the server found the harper
+pair beside itself, answered `/v2/check` with the style tier, and its `/status`
+dialect followed a `preferredVariants` request from American to British. The UI in
+the same archive serves from `ui/` (`python3 -m http.server --directory ui`), or
+install both halves with the two `make install` targets.
 
 ## Install (Linux, current user)
 
@@ -178,7 +195,9 @@ the request, which is what grammar-ui and the curl examples below do.
 
 ## Layout
 
-MIT licensed (see `LICENSE`); harper and harper-ls are Apache-2.0 and are not bundled here.
+MIT licensed (see `LICENSE`). harper and harper-ls are Apache-2.0: they are not
+vendored in this repository, but the release archive does carry them — with
+`LICENSE-harper` beside them, as Apache-2.0 requires.
 
 ```
 cmd/server/            entrypoint
