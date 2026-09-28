@@ -220,6 +220,43 @@ func (s *Server) handleLanguages(w http.ResponseWriter, _ *http.Request) {
 // anything LT accepts works here too.
 const maxTextChars = 200_000
 
+// The two limit messages, shared so the endpoints cannot drift apart. LanguageTool
+// clients show these bodies verbatim.
+const (
+	ltTextTooLong  = "Your text exceeds the limit of %d characters. Please submit a shorter text."
+	ltTextGot      = "Your text exceeds the limit of %d characters (it's %d characters). Please submit a shorter text."
+	rewriteTooLong = "A rewrite is limited to %d characters. Rewrite one sentence or paragraph at a time."
+	rewriteGot     = "A rewrite is limited to %d characters (it's %d). Rewrite one sentence or paragraph at a time."
+)
+
+// capBody applies the guard every text endpoint shares: refuse an over-declared
+// body on its Content-Length before reading it, then cap the reader at 4 bytes per
+// character (generous for UTF-8). msg takes the limit.
+//
+// The order is the point. The body cap is larger than the character cap, so when
+// MaxBytesReader fires first the client gets the decoder's JSON 400 "request body
+// too large" where LanguageTool answers a plain-text 413. /v2/rewrite had that bug
+// and /v2/fix-sentence still did until both moved here.
+func capBody(w http.ResponseWriter, r *http.Request, limit int, msg string) bool {
+	if r.ContentLength > int64(limit)*4+4096 {
+		writeLTError(w, http.StatusRequestEntityTooLarge, msg, limit)
+		return false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, int64(limit)*4+4096)
+	return true
+}
+
+// textTooLong refuses text past the character limit in LanguageTool's plain-text
+// shape, naming the size it got. msg takes the limit and the actual count.
+func textTooLong(w http.ResponseWriter, text string, limit int, msg string) bool {
+	n := len([]rune(text))
+	if n <= limit {
+		return false
+	}
+	writeLTError(w, http.StatusRequestEntityTooLarge, msg, limit, n)
+	return true
+}
+
 // writeLTError replies the way LanguageTool does: plain text, "Error: " prefix.
 // Clients show the body to the user as-is, so the shape is part of the contract.
 func writeLTError(w http.ResponseWriter, code int, format string, args ...any) {
@@ -233,14 +270,9 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	// Cheap early exit on a declared huge body; MaxBytesReader still guards a
-	// chunked body that declares nothing.
-	if r.ContentLength > maxTextChars*4+4096 {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"Your text exceeds the limit of %d characters. Please submit a shorter text.", maxTextChars)
+	if !capBody(w, r, maxTextChars, ltTextTooLong) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxTextChars*4+4096) // 4 bytes/char is generous
 	req, err := parseCheckRequest(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "%v", err)
@@ -250,10 +282,7 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "'text' is required")
 		return
 	}
-	if n := len([]rune(req.Text)); n > maxTextChars {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"Your text exceeds the limit of %d characters (it's %d characters). Please submit a shorter text.",
-			maxTextChars, n)
+	if textTooLong(w, req.Text, maxTextChars, ltTextGot) {
 		return
 	}
 	// An omitted language still means American English, as it always did; an
@@ -626,8 +655,10 @@ func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !capBody(w, r, maxTextChars, ltTextTooLong) {
+		return
+	}
 	var req FixSentenceRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxTextChars*4+4096)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: %v", err)
 		return
@@ -636,10 +667,7 @@ func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "'text' is required")
 		return
 	}
-	if n := len([]rune(req.Text)); n > maxTextChars {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"Your text exceeds the limit of %d characters (it's %d characters). Please submit a shorter text.",
-			maxTextChars, n)
+	if textTooLong(w, req.Text, maxTextChars, ltTextGot) {
 		return
 	}
 	sentence := extractSentence(req.Text, req.Offset)

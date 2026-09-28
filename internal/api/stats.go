@@ -18,15 +18,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	// ponytail: the size guard is spelled out here rather than shared with
-	// /v2/check and /v2/fix-sentence. All three collapse into one readText(w, r)
-	// helper when the handlers move behind internal/lt.
-	if r.ContentLength > maxTextChars*4+4096 {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"Your text exceeds the limit of %d characters. Please submit a shorter text.", maxTextChars)
+	if !capBody(w, r, maxTextChars, ltTextTooLong) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxTextChars*4+4096)
 	req, err := parseCheckRequest(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "%v", err)
@@ -36,10 +30,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "'text' is required")
 		return
 	}
-	if n := len([]rune(req.Text)); n > maxTextChars {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"Your text exceeds the limit of %d characters (it's %d characters). Please submit a shorter text.",
-			maxTextChars, n)
+	if textTooLong(w, req.Text, maxTextChars, ltTextGot) {
 		return
 	}
 	if _, ok := checkLang(w, req.Language); !ok {

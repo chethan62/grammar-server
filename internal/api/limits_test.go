@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -172,3 +173,60 @@ func TestStatsEndpoint(t *testing.T) {
 		t.Errorf("empty text = %d, want 400", r3.StatusCode)
 	}
 }
+
+// Both size guards on every text endpoint. The declared-length one runs first and
+// returns LanguageTool's shape: when the body reader wins instead, the decoder's
+// JSON 400 "request body too large" is what a client sees, which is not the error
+// LanguageTool defines. /v2/rewrite had exactly that bug, /v2/fix-sentence still
+// did, and the guard now lives in one place (capBody/textTooLong) for all of them.
+func TestBothSizeGuardsOnEveryTextEndpoint(t *testing.T) {
+	srv := newTestServer(t)
+	paths := []struct{ path, body string }{
+		{"/v2/check", `{"text":"hi","language":"en-US"}`},
+		{"/v2/fix-sentence", `{"text":"hi","offset":0}`},
+		{"/v2/stats", `{"text":"hi","language":"en-US"}`},
+	}
+
+	// Declared over the cap, sent small: the server must refuse on Content-Length
+	// without reading the body. Driven through the handler because net/http's
+	// client refuses to send a body shorter than the Content-Length it was given.
+	for _, tc := range paths {
+		req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		req.ContentLength = 5 << 20 // declared 5 MB
+		rec := httptest.NewRecorder()
+		srv.Config.Handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Errorf("%s declared 5 MB: status = %d, want 413", tc.path, rec.Code)
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+			t.Errorf("%s declared 5 MB: content-type = %q, want text/plain", tc.path, ct)
+		}
+		if !strings.HasPrefix(rec.Body.String(), "Error: ") {
+			t.Errorf("%s declared 5 MB: body = %q, want LanguageTool's error prefix", tc.path, rec.Body.String())
+		}
+	}
+
+	// Honest length over the character cap: refused by the rune count, which can
+	// name the size it got because the body was small enough to read.
+	big := strings.Repeat("a", maxTextCharsTest+1000)
+	for _, tc := range paths {
+		body := strings.Replace(tc.body, `"hi"`, strconv.Quote(big), 1)
+		resp, err := http.Post(srv.URL+tc.path, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.path, err)
+		}
+		got, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusRequestEntityTooLarge {
+			t.Errorf("%s over the cap: status = %d, want 413", tc.path, resp.StatusCode)
+		}
+		if !strings.Contains(string(got), "it's 201000 characters") {
+			t.Errorf("%s over the cap: body = %q, want the actual size named", tc.path, got)
+		}
+	}
+}
+
+// maxTextCharsTest mirrors api.maxTextChars, which an external test package cannot
+// read. Keep it in step if the cap moves.
+const maxTextCharsTest = 200_000

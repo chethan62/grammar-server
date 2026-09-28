@@ -63,15 +63,9 @@ func (s *Server) handleRewrite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	// Distance matters: an oversized body is refused on its declared length first,
-	// so the client gets the character-limit message and status, not the body
-	// reader's "invalid JSON: request body too large".
-	if r.ContentLength > maxRewriteChars*4+4096 {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"A rewrite is limited to %d characters. Rewrite one sentence or paragraph at a time.", maxRewriteChars)
+	if !capBody(w, r, maxRewriteChars, rewriteTooLong) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxRewriteChars*4+4096)
 	var req RewriteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: %v", err)
@@ -81,10 +75,7 @@ func (s *Server) handleRewrite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "'text' is required")
 		return
 	}
-	if n := len([]rune(req.Text)); n > maxRewriteChars {
-		writeLTError(w, http.StatusRequestEntityTooLarge,
-			"A rewrite is limited to %d characters (it's %d). Rewrite one sentence or paragraph at a time.",
-			maxRewriteChars, n)
+	if textTooLong(w, req.Text, maxRewriteChars, rewriteGot) {
 		return
 	}
 	if _, ok := checkLang(w, req.Language); !ok {
