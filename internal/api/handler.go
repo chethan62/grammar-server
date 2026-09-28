@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"grammar-server/internal/engine"
+	"grammar-server/internal/lt"
 )
 
 // ruleList accepts both LanguageTool encodings of a rule list: a JSON array
@@ -116,28 +117,6 @@ type Category struct {
 	Name string `json:"name"`
 }
 
-func dialectForLang(lang string) string {
-	switch {
-	case strings.Contains(lang, "GB"):
-		return "British"
-	case strings.Contains(lang, "CA"):
-		return "Canadian"
-	case strings.Contains(lang, "AU"):
-		return "Australian"
-	case strings.Contains(lang, "IN"):
-		return "Indian"
-	default:
-		return "American"
-	}
-}
-
-func langCode(lang string) string {
-	if lang == "" {
-		return "en-US"
-	}
-	return lang
-}
-
 // Server owns the HTTP handlers and the backing engine.
 type Server struct {
 	eng     *engine.Harper
@@ -152,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
+	mux.HandleFunc("/v2/stats", s.handleStats)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
 	mux.HandleFunc("/status", s.handleRoot) // old health endpoint
 	mux.HandleFunc("/", s.serveUI)          // single-page UI
@@ -162,14 +142,14 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"service": "grammar-server", "status": "OK", "version": s.version})
 }
 
+// handleLanguages serves the same table the check path validates against, so
+// the two can never drift apart.
 func (s *Server) handleLanguages(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, []LangInfo{
-		{Name: "English (US)", Code: "en-US"},
-		{Name: "English (UK)", Code: "en-GB"},
-		{Name: "English (Canada)", Code: "en-CA"},
-		{Name: "English (Australia)", Code: "en-AU"},
-		{Name: "English (India)", Code: "en-IN"},
-	})
+	langs := make([]LangInfo, 0, len(lt.Languages))
+	for _, l := range lt.Languages {
+		langs = append(langs, LangInfo{Name: l.Name, Code: l.Code})
+	}
+	writeJSON(w, 200, langs)
 }
 
 // maxTextChars caps a single /v2/check body. Past it the engine's cost is
@@ -215,8 +195,15 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 			maxTextChars, n)
 		return
 	}
+	// An omitted language still means American English, as it always did; an
+	// unknown one is refused instead of being checked as English, which used to
+	// return HTTP 200 with zero matches — a document nobody checked, reported clean.
+	lang, ok := checkLang(w, req.Language)
+	if !ok {
+		return
+	}
 
-	if err := s.eng.SetDialect(dialectForLang(req.Language)); err != nil {
+	if err := s.eng.SetDialect(lang.Dialect); err != nil {
 		writeError(w, http.StatusInternalServerError, "set dialect: %v", err)
 		return
 	}
@@ -317,7 +304,7 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			BuildDate:  time.Now().UTC().Format(time.RFC3339),
 			APIVersion: 2, Status: "OK",
 		},
-		Language:       LangInfo{Name: langName(req.Language), Code: langCode(req.Language)},
+		Language:       languageInfo(req.Language),
 		Matches:        matches,
 		SentenceRanges: ranges,
 	}
@@ -376,13 +363,6 @@ func buildContext(text string, start, end int) MatchContext {
 		Offset: int64(start - s),
 		Length: int64(end - start),
 	}
-}
-
-func langName(lang string) string {
-	if lang == "" {
-		return "English (US)"
-	}
-	return lang
 }
 
 func logRequests(next http.Handler) http.Handler {
