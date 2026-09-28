@@ -16,8 +16,11 @@ jobs:
           go-version: '1.22'
       - name: Install harper
         run: |
-          curl -fsSL https://github.com/Automattic/harper/releases/download/v2.7.0/harper-linux-x86_64.tar.gz | tar xz
+          base=https://github.com/Automattic/harper/releases/download/v2.7.0
+          curl -fsSL "$base/harper-ls-x86_64-unknown-linux-gnu.tar.gz" | tar xz
+          curl -fsSL "$base/harper-cli-x86_64-unknown-linux-gnu.tar.gz" | tar xz
           sudo mv harper-ls harper-cli /usr/local/bin/
+          harper-ls --version
       - run: go vet ./...
       - run: go test -v -timeout 60s ./internal/api/
       - run: go build -o grammar-server ./cmd/server
