@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"time"
 )
 
 // Message is a JSON-RPC 2.0 message (request, response, or notification).
@@ -148,8 +149,19 @@ func (c *Client) Send(m Message) error {
 	return err
 }
 
-// Request sends a request and waits for its response.
+// DefaultRequestTimeout bounds every engine round-trip. Before it existed a
+// silent harper-ls held Harper.mu forever, so one bad document wedged every
+// later check (observed: a 200 KB request ran past 47 s and the client's
+// connection was closed while the engine kept chewing).
+const DefaultRequestTimeout = 15 * time.Second
+
+// Request sends a request and waits up to DefaultRequestTimeout.
 func (c *Client) Request(method string, params any) (Message, error) {
+	return c.RequestContext(method, params, DefaultRequestTimeout)
+}
+
+// RequestContext is Request with an explicit deadline.
+func (c *Client) RequestContext(method string, params any, timeout time.Duration) (Message, error) {
 	c.mu.Lock()
 	id := c.nextID
 	c.nextID++
@@ -159,16 +171,33 @@ func (c *Client) Request(method string, params any) (Message, error) {
 
 	pb, err := json.Marshal(params)
 	if err != nil {
+		c.forget(id)
 		return Message{}, err
 	}
 	if err := c.Send(Message{JSONRPC: "2.0", ID: &id, Method: method, Params: pb}); err != nil {
+		c.forget(id)
 		return Message{}, err
 	}
-	resp := <-ch
-	if resp.Error != nil {
-		return resp, fmt.Errorf("lsp %s: server error", method)
+	select {
+	case resp := <-ch:
+		if resp.Error != nil {
+			return resp, fmt.Errorf("lsp %s: server error: %s", method, string(*resp.Error))
+		}
+		return resp, nil
+	case err := <-c.Err():
+		c.forget(id)
+		return Message{}, fmt.Errorf("lsp %s: transport: %w", method, err)
+	case <-time.After(timeout):
+		c.forget(id)
+		return Message{}, fmt.Errorf("lsp %s: timed out after %s", method, timeout)
 	}
-	return resp, nil
+}
+
+// forget drops a pending entry nobody will answer.
+func (c *Client) forget(id int64) {
+	c.mu.Lock()
+	delete(c.pending, id)
+	c.mu.Unlock()
 }
 
 // Notify sends a notification (no id).
