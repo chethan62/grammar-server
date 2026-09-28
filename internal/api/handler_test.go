@@ -237,6 +237,95 @@ func TestConcurrentChecks(t *testing.T) {
 	}
 }
 
+// LanguageTool's API accepts JSON bodies, form-encoded POSTs, and GET query
+// parameters — clients (browser extensions, LibreOffice) use all three.
+func TestCheckRequestShapes(t *testing.T) {
+	srv := newTestServer(t)
+
+	// (path, method, content-type, body) — each must find the 2 SpellChecks.
+	cases := []struct {
+		name, method, ct, body string
+	}{
+		{"json", "POST", "application/json", `{"text":"this has a misspeled wurd","language":"en-US"}`},
+		{"form", "POST", "application/x-www-form-urlencoded", "text=this+has+a+misspeled+wurd&language=en-US"},
+		{"query", "GET", "", "text=this%20has%20a%20misspeled%20wurd&language=en-US"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := srv.URL + "/v2/check"
+			var req *http.Request
+			var err error
+			if tc.method == "GET" {
+				req, err = http.NewRequest("GET", url+"?"+tc.body, nil)
+			} else {
+				req, err = http.NewRequest("POST", url, strings.NewReader(tc.body))
+				if err == nil {
+					req.Header.Set("Content-Type", tc.ct)
+				}
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				t.Fatalf("status %d", resp.StatusCode)
+			}
+			var out struct {
+				Matches []checkMatch `json:"matches"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			spell := 0
+			for _, m := range out.Matches {
+				if m.Rule.ID == "SpellCheck" {
+					spell++
+				}
+			}
+			if spell < 2 {
+				t.Errorf("expected >=2 SpellCheck matches, got %d (%+v)", spell, out.Matches)
+			}
+		})
+	}
+}
+
+// Rule lists arrive as a JSON array or, from form/query clients, as a
+// comma-separated string.
+func TestRuleListEncodings(t *testing.T) {
+	srv := newTestServer(t)
+
+	for _, tc := range []struct{ name, body string }{
+		{"json-array", `{"text":"teh wurd","disabledRules":["SpellCheck"]}`},
+		{"json-string", `{"text":"teh wurd","disabledRules":"SpellCheck"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := http.Post(srv.URL+"/v2/check", "application/json", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var out struct {
+				Matches []checkMatch `json:"matches"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range out.Matches {
+				if m.Rule.ID == "SpellCheck" {
+					t.Errorf("SpellCheck should be disabled, but got a match")
+				}
+			}
+			if len(out.Matches) == 0 {
+				t.Errorf("expected remaining matches after disabling SpellCheck")
+			}
+		})
+	}
+}
+
 // Regression: non-ASCII text mixed byte offsets with UTF-16 code units, so
 // context.text/context.offset did not point at the match, sentenceRanges
 // landed on the wrong boundaries, and fix-sentence corrupted the text.

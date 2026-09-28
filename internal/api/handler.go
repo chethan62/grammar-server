@@ -12,12 +12,47 @@ import (
 	"grammar-server/internal/engine"
 )
 
-// CheckRequest mirrors the LanguageTool /v2/check request body.
+// ruleList accepts both LanguageTool encodings of a rule list: a JSON array
+// ({"enabledRules":["The"]}) and a comma-separated string ("The,SpellCheck"),
+// which is what form-encoded/query clients send.
+type ruleList []string
+
+func (l *ruleList) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*l = splitRules(s)
+		return nil
+	}
+	var arr []string
+	if err := json.Unmarshal(b, &arr); err != nil {
+		return err
+	}
+	*l = arr
+	return nil
+}
+
+// splitRules splits a comma-separated rule list, trimming blanks.
+func splitRules(s string) ruleList {
+	var out ruleList
+	for _, r := range strings.Split(s, ",") {
+		if r = strings.TrimSpace(r); r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// CheckRequest mirrors the LanguageTool /v2/check request body. It is read
+// from a JSON body, a form-encoded POST, or GET query parameters — the three
+// shapes real LanguageTool clients send.
 type CheckRequest struct {
 	Text          string   `json:"text"`
 	Language      string   `json:"language"`
-	EnabledRules  []string `json:"enabledRules"`  // if non-empty, return only these
-	DisabledRules []string `json:"disabledRules"` // never report these
+	EnabledRules  ruleList `json:"enabledRules"`  // if non-empty, return only these
+	DisabledRules ruleList `json:"disabledRules"` // never report these
 	MotherTongue  string   `json:"motherTongue"`
 }
 
@@ -166,13 +201,13 @@ func (s *Server) handleLanguages(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	var req CheckRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: %v", err)
+	req, err := parseCheckRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "%v", err)
 		return
 	}
 	if req.Text == "" {
@@ -192,6 +227,31 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 
 	resp := s.buildResponse(req, lints)
 	writeJSON(w, 200, resp)
+}
+
+// parseCheckRequest reads the three request shapes LanguageTool clients use:
+// a JSON body, an application/x-www-form-urlencoded POST, and GET query
+// parameters. LanguageTool's own API accepts all three.
+func parseCheckRequest(r *http.Request) (CheckRequest, error) {
+	var req CheckRequest
+	media := strings.ToLower(r.Header.Get("Content-Type"))
+	switch {
+	case r.Method == http.MethodGet || strings.HasPrefix(media, "application/x-www-form-urlencoded"):
+		if err := r.ParseForm(); err != nil {
+			return req, fmt.Errorf("invalid form data: %w", err)
+		}
+		req.Text = r.Form.Get("text")
+		req.Language = r.Form.Get("language")
+		req.MotherTongue = r.Form.Get("motherTongue")
+		req.EnabledRules = splitRules(r.Form.Get("enabledRules"))
+		req.DisabledRules = splitRules(r.Form.Get("disabledRules"))
+		return req, nil
+	default:
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return req, fmt.Errorf("invalid JSON: %w", err)
+		}
+		return req, nil
+	}
 }
 
 func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckResponse {
