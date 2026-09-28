@@ -109,3 +109,44 @@ func ltRuleFor(l engine.Lint) ltRule {
 	d.ID = l.Rule // no known counterpart: keep harper's id
 	return d
 }
+
+// ltToHarper maps the LanguageTool rule ids we present back to harper's rule
+// names, so enabledRules can genuinely switch a rule on instead of only filtering
+// what the engine already found. Without it the off-by-default rules —
+// BoringWords, NoOxfordComma, SpelledNumbers, PossessiveNoun, PreferPled,
+// PreferSnuck, MoreAdjective, AvoidContractions, AnotherThinkComing,
+// ViciousCircleOrCycle, AnalogAcousticBike, ViciousCycle — are unreachable.
+//
+// An explicit literal rather than an inversion of harperToLT: two harper rules
+// share one LanguageTool id (SpellCheck and SpellCheckCompound are both
+// MORFOLOGIK_RULE_EN_US) and map iteration order is random.
+var ltToHarper = map[string]string{
+	"MORFOLOGIK_RULE_EN_US":    "SpellCheck",
+	"I_LOWERCASE":              "CapitalizePersonalPronouns",
+	"UPPERCASE_SENTENCE_START": "SentenceCapitalization",
+	"CONSECUTIVE_SPACES":       "Spaces",
+	"HE_VERB_AGR":              "PronounVerbAgreement",
+	"VERY_UNIQUE":              "VeryUnique",
+}
+
+// styleRuleIDs are ours, not harper's: internal/lt produces them, so they must
+// never be handed to the engine as linter names.
+var styleRuleIDs = map[string]bool{"WORDINESS": true, "PASSIVE_VOICE_SIMPLE": true}
+
+// harperRuleNames resolves a client rule list into harper rule names. LanguageTool
+// ids are translated; anything else passes through unchanged, which is how a
+// client asks for harper's own rules by name (BoringWords, LongSentences).
+func harperRuleNames(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" || styleRuleIDs[id] {
+			continue
+		}
+		if name, ok := ltToHarper[id]; ok {
+			out = append(out, name)
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}

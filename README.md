@@ -34,15 +34,26 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
 `POST /v2/check` — LanguageTool request/response:
 
 ```json
-{"text": "…", "language": "en-US", "enabledRules": [], "disabledRules": []}
+{"text": "…", "language": "en-US", "enabledRules": [], "disabledRules": [],
+ "enabledCategories": [], "disabledCategories": [], "enabledOnly": false,
+ "level": "default", "motherTongue": "de-DE", "preferredVariants": "en-US"}
 ```
 
 - `offset`/`length` are **UTF-16 code units** (matches LanguageTool/LTeX).
-- `disabledRules`/`enabledRules` filter by rule ID — either LanguageTool's
-  (`MORFOLOGIK_RULE_EN_US`) or harper's native name (`SpellCheck`, `The`,
-  `SentenceCapitalization`, …).
 - `language` selects the harper dialect (`en-US` → American, `en-GB` → British, …).
+  A language this server cannot check is refused with LanguageTool's own `400`.
+- `enabledRules`/`disabledRules` take LanguageTool rule ids (`MORFOLOGIK_RULE_EN_US`)
+  or harper's native names (`SpellCheck`, `BoringWords`, …), and they reach the
+  engine: `enabledRules` can switch on rules harper ships **off**, which filtering
+  results could never do. `enabledCategories`/`disabledCategories` take
+  `GRAMMAR`/`TYPOS`/`STYLE`/…, and `enabledOnly` runs nothing but what was asked for.
+- `level=picky` adds the style tier (see below). Everything else is the
+  correctness tier, so an editor client is never shown hints it did not ask for.
+- `motherTongue` and `preferredVariants` are accepted and ignored — they are part of
+  the client contract, not a behaviour this server has.
 - `replacements[]` come from harper-ls code actions.
+- A text longer than the engine can hold in one call is checked in sentence-aligned
+  chunks (~12 KB), so offsets stay correct into the hundreds of kilobytes.
 
 Other endpoints: `GET /` (an index of the endpoints below — this server is
 API-only now; the UI is a separate static page, [grammar-ui](https://github.com/chethan62/grammar-ui),
@@ -52,7 +63,7 @@ which you point at this origin), `GET /v2/stats` (delivery metrics),
 ## Architecture
 
 ```
-cmd/server/main.go        entrypoint (flags: --port, --dialect, --harper)
+cmd/server/main.go        entrypoint (flags: --port, --host, --dialect, --harper)
 internal/lsp/client.go    minimal JSON-RPC/LSP client over stdio (Content-Length framing)
 internal/engine/harper.go owns one persistent harper-ls process; didOpen → publishDiagnostics
                           → codeAction suggestions; unique doc URI per check (no cross-talk);
@@ -64,6 +75,19 @@ internal/api/handler.go   /v2/check handler + LanguageTool JSON mapping
 Design notes:
 
 - **One persistent harper-ls** — per-request spawns would be ~500ms; LSP lint is ~3-10ms.
+- **Rule list read once** — `harper-cli config` prints hundreds of rules from a 150 MB
+  process (~0.7s). It is read once per engine and the map is reused, which is the
+  difference between a rule toggle costing 0.7s and costing nothing.
+- **A quiet engine is a dead engine** — harper-ls occasionally stops answering while
+  the process stays alive. A check that gets no diagnostics reconnects and retries
+  once, so one bad request is slow rather than every later request being a 500.
+- **Documents are closed after each check** — harper-ls re-lints every open document
+  on a configuration change, so leaving them open made toggles slower and fatter.
+- **Style hints are opt-in** — `level=picky` or `enabledCategories=[STYLE]`. They carry
+  LanguageTool's ids (`WORDINESS` is ours, `PASSIVE_VOICE_SIMPLE` is theirs) so clients
+  render them unchanged. The passive hint deliberately carries **no** replacement:
+  guessing the actor ships wrong fixes.
+- **Localhost by default** — `--host 0.0.0.0` to expose it deliberately.
 - **Unique URI per check** — harper-ls publishes diagnostics tagged by document URI;
   reusing one URI lets concurrent checks cross-match stale publishes (was a real bug).
 - **UTF-16 offsets** — LSP positions are UTF-16 code units; LanguageTool clients (LTeX)

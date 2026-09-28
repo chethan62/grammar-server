@@ -4,7 +4,9 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -43,8 +45,18 @@ type Harper struct {
 	config  json.RawMessage // {"harper-ls":{...}} full wrapper
 	bin     string
 	dialect string   // current dialect (for reconnects)
+	en      []string // rule names switched on by a client (kept for reconnects)
 	dis     []string // disabled rule names (kept for dialect switches)
+	only    bool     // enabledOnly: run just the rules in en
+
+	ruleOnce sync.Once // the rule list is read from the CLI once
+	rules    map[string]ruleInfo
+	ruleErr  error
 }
+
+// diagnosticsTimeout bounds one document's lint. harper answers in milliseconds;
+// ten seconds is the point past which waiting has stopped being useful.
+const diagnosticsTimeout = 10 * time.Second
 
 var kindMap = map[string]string{
 	"SpellCheck":                 "grammar",
@@ -78,40 +90,47 @@ func NewHarper(bin, dialect string, disabled []string) (*Harper, error) {
 		c.Stop()
 		return nil, err
 	}
-	if err := h.setConfig(dialect, disabled); err != nil {
+	if err := h.setConfig(dialect, nil, disabled, false); err != nil {
 		c.Stop()
 		return nil, err
 	}
 	// Warm up: run one lint so harper-ls loads word lists/caches before any
 	// real request (otherwise the first spell-check batch comes back empty).
-	_ = h.checkDiags("This is the quick brown fox jumping over the lazy dog.", h.newURI())
+	_, _ = h.checkDiags("This is the quick brown fox jumping over the lazy dog.", h.newURI())
 	return h, nil
 }
 
 // setConfig builds the full linter map (unlisted rules = disabled for harper-ls)
 // and pushes it via didChangeConfiguration.
-func (h *Harper) setConfig(dialect string, disabled []string) error {
+//
+// Harper's config means "everything not listed is off", so the map is derived
+// from harper-cli's own rule list rather than hand-written: a rule stays on when
+// it is on by default (or a client asked for it by name) and is not disabled.
+// only — LanguageTool's enabledOnly — drops the defaults and leaves just the
+// requested set.
+func (h *Harper) setConfig(dialect string, enabled, disabled []string, only bool) error {
+	en := map[string]bool{}
+	for _, r := range enabled {
+		en[r] = true
+	}
 	dis := map[string]bool{}
 	for _, r := range disabled {
 		dis[r] = true
 	}
 	linters := map[string]bool{}
-	if out, err := exec.Command(h.cliBin(), "config").Output(); err == nil {
-		var rules map[string]struct {
-			DefaultValue bool `json:"default_value"`
-		}
-		if json.Unmarshal(out, &rules) == nil {
-			for name, info := range rules {
-				// enabled unless user-disabled or the rule is off by default
-				linters[name] = !dis[name] && info.DefaultValue
-			}
-		}
-	}
-	if len(linters) == 0 {
-		for _, name := range []string{"SpellCheck", "SpellCheckCompound", "The",
-			"CapitalizePersonalPronouns", "SentenceCapitalization", "LeftRightHand",
-			"Spaces", "LackOfConjunction"} {
+	rules, err := h.ruleList()
+	if err != nil {
+		// Any rule missing from this map is off, so the fallback silently drops the
+		// engine from hundreds of rules to eight. Say it out loud: the service still
+		// answers, and nothing in the response says it is running crippled.
+		log.Printf("engine: reading harper's rule list from %s failed: %v; falling back to %d built-in rules",
+			h.cliBin(), err, len(fallbackRules))
+		for _, name := range fallbackRules {
 			linters[name] = !dis[name]
+		}
+	} else {
+		for name, info := range rules {
+			linters[name] = !dis[name] && (en[name] || (!only && info.DefaultValue))
 		}
 	}
 	h.config, _ = json.Marshal(map[string]any{
@@ -122,12 +141,55 @@ func (h *Harper) setConfig(dialect string, disabled []string) error {
 	})
 }
 
+// fallbackRules is the hand-written subset used when the paired CLI cannot be
+// read. Every other harper rule is simply off in that state.
+var fallbackRules = []string{"SpellCheck", "SpellCheckCompound", "The",
+	"CapitalizePersonalPronouns", "SentenceCapitalization", "LeftRightHand",
+	"Spaces", "LackOfConjunction"}
+
+// cliBin is the harper-cli that ships beside harper-ls: it is how the rule list is
+// read, so a wrong path here means a crippled engine rather than an error.
 func (h *Harper) cliBin() string {
 	if cli := os.Getenv("HARPER_CLI"); cli != "" {
 		return cli
 	}
-	// Fallback: "harper-ls" -> "harper-cli"
-	return h.bin[:len(h.bin)-3] + "cli"
+	// "harper-ls" sits next to "harper-cli": swap the suffix, never chop it.
+	// Chopping produced "harpercli", which resolves nowhere.
+	if strings.HasSuffix(h.bin, "-ls") {
+		return strings.TrimSuffix(h.bin, "-ls") + "-cli"
+	}
+	return "harper-cli"
+}
+
+// ruleInfo is one entry of harper's rule list: its default on/off state.
+type ruleInfo struct {
+	DefaultValue bool `json:"default_value"`
+}
+
+// ruleList reads harper's rule defaults, once per engine.
+//
+// The list comes from the paired CLI, a 150 MB process that takes ~0.7 s to print
+// it, and it was re-read on every configuration change — which made a rule toggle
+// or a dialect switch cost that fork rather than the change itself.
+func (h *Harper) ruleList() (map[string]ruleInfo, error) {
+	h.ruleOnce.Do(func() {
+		out, err := exec.Command(h.cliBin(), "config").Output()
+		if err != nil {
+			h.ruleErr = err
+			return
+		}
+		var rules map[string]ruleInfo
+		if err := json.Unmarshal(out, &rules); err != nil {
+			h.ruleErr = fmt.Errorf("unparseable rule list: %w", err)
+			return
+		}
+		if len(rules) == 0 {
+			h.ruleErr = errors.New("empty rule list")
+			return
+		}
+		h.rules = rules
+	})
+	return h.rules, h.ruleErr
 }
 
 // SetDialect reconfigures the engine for a different English dialect.
@@ -141,7 +203,51 @@ func (h *Harper) SetDialect(dialect string) error {
 	if err := h.ensureAlive(); err != nil {
 		return err
 	}
-	return h.setConfig(dialect, h.dis)
+	return h.setConfig(dialect, h.en, h.dis, h.only)
+}
+
+// SetRules turns individual rules on and off for the checks that follow.
+// enabled names rules to switch on beyond the defaults (the off-by-default
+// rules — BoringWords, NoOxfordComma, SpelledNumbers, PossessiveNoun, …),
+// disabled names rules to switch off, and only is LanguageTool's enabledOnly:
+// run nothing but the enabled set.
+//
+// Reconfiguring harper-ls costs a didChangeConfiguration round trip, so the
+// applied set is remembered and an unchanged request is a no-op. Clients send
+// their toggles on every check; paying for them once is the difference between
+// a rule filter and a per-request tax.
+func (h *Harper) SetRules(enabled, disabled []string, only bool) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.only == only && sameStrings(h.en, enabled) && sameStrings(h.dis, disabled) {
+		return nil
+	}
+	if err := h.ensureAlive(); err != nil {
+		return err
+	}
+	if err := h.setConfig(h.dialect, enabled, disabled, only); err != nil {
+		return err
+	}
+	h.en, h.dis, h.only = append([]string(nil), enabled...), append([]string(nil), disabled...), only
+	return nil
+}
+
+// sameStrings reports set equality for two rule-name lists, order-insensitive.
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, s := range a {
+		seen[s]++
+	}
+	for _, s := range b {
+		seen[s]--
+		if seen[s] < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // Close terminates the harper-ls subprocess.
@@ -163,7 +269,7 @@ func (h *Harper) Reconnect() error {
 		return err
 	}
 	// Re-push the full config so subsequent checks work
-	if err := h.setConfig(h.dialect, h.dis); err != nil {
+	if err := h.setConfig(h.dialect, h.en, h.dis, h.only); err != nil {
 		return err
 	}
 	return nil
@@ -180,28 +286,51 @@ func (h *Harper) Check(text string) ([]Lint, error) {
 		return nil, err
 	}
 	uri := h.newURI()
-	diags := h.checkDiags(text, uri)
+	diags, err := h.checkDiags(text, uri)
+	if err != nil {
+		// harper-ls sometimes goes quiet: the process stays up and stops answering.
+		// There is nothing to repair in it from here, and a fresh process always
+		// answers, so one reconnect-and-retry turns a wedged engine into a slow
+		// answer instead of a 500 for every request that follows.
+		if rerr := h.Reconnect(); rerr != nil {
+			return nil, fmt.Errorf("%w (reconnect failed: %v)", err, rerr)
+		}
+		uri = h.newURI()
+		if diags, err = h.checkDiags(text, uri); err != nil {
+			return nil, err
+		}
+	}
+	// Close the document whatever happens: an open document is one harper-ls keeps
+	// in memory and re-lints on every configuration change, so leaving them open
+	// grew memory without bound (318 MB peak).
+	defer h.closeDoc(uri)
 	l := h.diagsToLints(diags, text)
 	h.enrich(uri, diags, l)
 	return l, nil
 }
 
-// ensureAlive checks whether the LSP connection is healthy, reconnecting if not.
-func (h *Harper) ensureAlive() error {
-	// Quick probe: send a no-op notification (didOpen with empty text).
-	// If the pipe is broken, Reconnect().
-	err := h.c.Notify("textDocument/didOpen", map[string]any{
-		"textDocument": map[string]any{
-			"uri":        "file:///tmp/_probe.md",
-			"languageId": "markdown",
-			"version":    1,
-			"text":       "",
-		},
+// closeDoc tells harper-ls we are finished with a document. Each check opens a
+// fresh URI, so without this harper-ls accumulates one document per check.
+func (h *Harper) closeDoc(uri string) {
+	_ = h.c.Notify("textDocument/didClose", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
 	})
-	if err != nil {
+}
+
+// ensureAlive reconnects if the harper-ls connection has died.
+//
+// It used to probe by re-opening the same probe document on every call. That is a
+// protocol violation — the document is never closed — and it put a didOpen
+// immediately before every configuration change, which is exactly the interleaving
+// that left harper-ls alive but publishing nothing. Liveness is now read off the
+// connection instead: the read loop closes its channel when it stops.
+func (h *Harper) ensureAlive() error {
+	select {
+	case <-h.c.Done():
 		return h.Reconnect()
+	default:
+		return nil
 	}
-	return nil
 }
 
 // newURI returns a fresh, unique document URI per check.
@@ -211,7 +340,11 @@ func (h *Harper) newURI() string {
 }
 
 // checkDiags sends didOpen and reads until publishDiagnostics for uri.
-func (h *Harper) checkDiags(text, uri string) []json.RawMessage {
+//
+// A timeout is an error, not an empty result: harper-ls always publishes a
+// diagnostics array (empty when the text is clean), so treating silence as "no
+// problems" would report an unchecked document as clean.
+func (h *Harper) checkDiags(text, uri string) ([]json.RawMessage, error) {
 	if err := h.c.Notify("textDocument/didOpen", map[string]any{
 		"textDocument": map[string]any{
 			"uri":        uri,
@@ -220,11 +353,11 @@ func (h *Harper) checkDiags(text, uri string) []json.RawMessage {
 			"text":       text,
 		},
 	}); err != nil {
-		return nil
+		return nil, err
 	}
 
 	var diags []json.RawMessage
-	timeout := time.NewTimer(10 * time.Second)
+	timeout := time.NewTimer(diagnosticsTimeout)
 	defer timeout.Stop()
 loop:
 	for {
@@ -243,12 +376,15 @@ loop:
 				}
 			}
 		case <-h.c.Err():
-			return nil
+			return nil, fmt.Errorf("harper-ls connection closed")
 		case <-timeout.C:
 			break loop
 		}
 	}
-	return diags
+	if diags == nil {
+		return nil, fmt.Errorf("harper-ls did not answer within %s", diagnosticsTimeout)
+	}
+	return diags, nil
 }
 
 // enrich fetches codeAction suggestions for each diagnostic (harper-ls returns

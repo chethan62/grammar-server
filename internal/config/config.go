@@ -12,6 +12,7 @@ import (
 // Config is the full grammar-server configuration.
 type Config struct {
 	Port    int    `yaml:"port"    json:"port"`
+	Host    string `yaml:"host"    json:"host"` // bind address; localhost unless you mean to expose it
 	Dialect string `yaml:"dialect" json:"dialect"`
 	Harper  string `yaml:"harper"  json:"harper"`
 	LogFmt  string `yaml:"log_fmt"  json:"log_fmt"` // "text" or "json"
@@ -31,7 +32,11 @@ type Config struct {
 // waiting three times as long; that is a poor trade for a button in a text box.
 func Defaults() Config {
 	return Config{
-		Port:    8875,
+		Port: 8875,
+		// 127.0.0.1, not the empty host: a checker that reads everything you write
+		// has no business listening on the LAN by default. Pass --host 0.0.0.0 to
+		// expose it deliberately.
+		Host:    "127.0.0.1",
 		Dialect: "American",
 		Harper:  "harper-ls",
 		LogFmt:  "text",

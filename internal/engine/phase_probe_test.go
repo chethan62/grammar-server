@@ -37,13 +37,17 @@ func TestPhaseSplit(t *testing.T) {
 			uri := h.newURI()
 
 			t0 := time.Now()
-			diags := h.checkDiags(text, uri)
+			diags, err := h.checkDiags(text, uri)
+			if err != nil {
+				t.Fatalf("checkDiags: %v", err)
+			}
 			tLint := time.Since(t0)
 
 			lints := h.diagsToLints(diags, text)
 			t0 = time.Now()
 			h.enrich(uri, diags, lints)
 			tEnrich := time.Since(t0)
+			h.closeDoc(uri) // one probe document at a time, like production
 
 			reps_ := 0
 			for _, l := range lints {

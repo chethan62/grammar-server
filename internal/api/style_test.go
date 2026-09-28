@@ -11,15 +11,13 @@ import (
 // for these sentences and even LanguageTool's picky level only reports the
 // passive one (as PASSIVE_VOICE_SIMPLE, category STYLE). They must therefore
 // arrive as ordinary matches with LT rule ids, so existing clients render them
-// with no changes.
+// with no changes. They are the picky tier — level=picky, or enabledCategories
+// [STYLE] — so a client that asked for correctness alone never sees them.
 func TestStyleHintsAppearAsMatches(t *testing.T) {
 	srv := newTestServer(t)
 	text := "In order to make a decision, the report was written by the team."
 
-	matches, err := postCheck(srv.URL, text)
-	if err != nil {
-		t.Fatal(err)
-	}
+	matches := postCheckPicky(t, srv.URL, text)
 	var wordy, passive []checkMatch
 	for _, m := range matches {
 		switch m.Rule.ID {
@@ -82,7 +80,8 @@ func TestStyleHintsCanBeDisabled(t *testing.T) {
 		"PASSIVE_VOICE_SIMPLE": "PASSIVE_VOICE_SIMPLE", "PassiveVoice": "PASSIVE_VOICE_SIMPLE",
 	} {
 		body, err := json.Marshal(map[string]any{
-			"text": text, "language": "en-US", "disabledRules": []string{name},
+			"text": text, "language": "en-US", "level": "picky",
+			"disabledRules": []string{name},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -114,10 +113,7 @@ func TestStyleHintOffsetsAreUTF16(t *testing.T) {
 	srv := newTestServer(t)
 	text := "😀 in order to run."
 
-	matches, err := postCheck(srv.URL, text)
-	if err != nil {
-		t.Fatal(err)
-	}
+	matches := postCheckPicky(t, srv.URL, text)
 	if len(matches) != 1 {
 		t.Fatalf("matches = %+v, want exactly the wordiness hint", matches)
 	}

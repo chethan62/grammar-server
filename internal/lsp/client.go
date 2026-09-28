@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -21,6 +23,11 @@ type Message struct {
 	Result  json.RawMessage  `json:"result,omitempty"`
 	Error   *json.RawMessage `json:"error,omitempty"`
 }
+
+// trace is set by HARPER_LSP_TRACE=1: it logs every message in both directions.
+// When an engine stops answering, the wire is the only place the reason is
+// visible, and this is how it gets read.
+var trace = os.Getenv("HARPER_LSP_TRACE") != ""
 
 // Client is a blocking JSON-RPC client over a subprocess's stdio.
 type Client struct {
@@ -70,6 +77,10 @@ func Start(bin string, args ...string) (*Client, error) {
 // Err returns a channel that receives fatal transport errors (subprocess exit).
 func (c *Client) Err() <-chan error { return c.errCh }
 
+// Done is closed when the read loop stops, which is how a caller learns the
+// connection is dead without having to write to it first.
+func (c *Client) Done() <-chan struct{} { return c.readerDone }
+
 func (c *Client) readLoop(r io.Reader) {
 	defer close(c.readerDone)
 	br := bufio.NewReader(r)
@@ -107,6 +118,9 @@ func (c *Client) readLoop(r io.Reader) {
 		if err := json.Unmarshal(body, &m); err != nil {
 			continue // ignore malformed
 		}
+		if trace {
+			log.Printf("lsp <-- method=%q id=%v %d bytes", m.Method, m.ID, len(body))
+		}
 		switch {
 		case m.ID != nil && m.Method == "":
 			// response to one of our requests
@@ -122,12 +136,14 @@ func (c *Client) readLoop(r io.Reader) {
 			select {
 			case c.ServerRequests <- m:
 			default:
+				log.Printf("lsp: dropping server request %s (nobody answered %d before it)", m.Method, cap(c.ServerRequests))
 			}
 		case m.Method != "":
 			// notification (publishDiagnostics, ...)
 			select {
 			case c.Notifications <- m:
 			default:
+				log.Printf("lsp: dropping notification %s (queue of %d full)", m.Method, cap(c.Notifications))
 			}
 		}
 	}
@@ -141,6 +157,9 @@ func (c *Client) Send(m Message) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if trace {
+		log.Printf("lsp --> method=%q id=%v %d bytes", m.Method, m.ID, len(body))
+	}
 	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(body))
 	if _, err := c.stdin.Write([]byte(header)); err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,6 +37,35 @@ func (l *ruleList) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// truthy reads a boolean the way form/query clients send it ("true", "1", …).
+func truthy(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1", "yes", "on":
+		return true
+	}
+	return false
+}
+
+// styleRequested reports whether the client asked for the style tier: the picky
+// level, the STYLE category, or one of the two style rules by id. LanguageTool
+// behaves the same way — its passive-voice rule fires only at level=picky.
+func styleRequested(req CheckRequest) bool {
+	if req.Level == "picky" {
+		return true
+	}
+	for _, c := range req.EnabledCategories {
+		if strings.EqualFold(c, "STYLE") {
+			return true
+		}
+	}
+	for _, r := range req.EnabledRules {
+		if styleRuleIDs[r] {
+			return true
+		}
+	}
+	return false
+}
+
 // splitRules splits a comma-separated rule list, trimming blanks.
 func splitRules(s string) ruleList {
 	var out ruleList
@@ -51,11 +81,16 @@ func splitRules(s string) ruleList {
 // from a JSON body, a form-encoded POST, or GET query parameters — the three
 // shapes real LanguageTool clients send.
 type CheckRequest struct {
-	Text          string   `json:"text"`
-	Language      string   `json:"language"`
-	EnabledRules  ruleList `json:"enabledRules"`  // if non-empty, return only these
-	DisabledRules ruleList `json:"disabledRules"` // never report these
-	MotherTongue  string   `json:"motherTongue"`
+	Text               string   `json:"text"`
+	Language           string   `json:"language"`
+	EnabledRules       ruleList `json:"enabledRules"`       // switch these on (with enabledOnly: only these)
+	DisabledRules      ruleList `json:"disabledRules"`      // never report these
+	EnabledCategories  ruleList `json:"enabledCategories"`  // switch whole categories on
+	DisabledCategories ruleList `json:"disabledCategories"` // never report these categories
+	EnabledOnly        bool     `json:"enabledOnly"`        // nothing but the rules/categories named above
+	Level              string   `json:"level"`              // "" or "default"; "picky" adds the style tier
+	MotherTongue       string   `json:"motherTongue"`       // accepted; no rule uses it yet
+	PreferredVariants  string   `json:"preferredVariants"`  // accepted; only meaningful with language=auto
 }
 
 // CheckResponse mirrors the LanguageTool /v2/check response.
@@ -64,6 +99,13 @@ type CheckResponse struct {
 	Language       LangInfo  `json:"language"`
 	Matches        []Match   `json:"matches"`
 	SentenceRanges [][]int64 `json:"sentenceRanges"`
+	Warnings       Warnings  `json:"warnings"`
+}
+
+// Warnings is part of the LanguageTool response shape: clients read
+// incompleteResults to learn whether the whole text was checked.
+type Warnings struct {
+	IncompleteResults bool `json:"incompleteResults"`
 }
 
 type Software struct {
@@ -222,19 +264,35 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Level != "" && req.Level != "default" && req.Level != "picky" {
+		writeLTError(w, http.StatusBadRequest, "level must be 'default' or 'picky', got '%s'", req.Level)
+		return
+	}
 	if err := s.eng.SetDialect(lang.Dialect); err != nil {
 		writeError(w, http.StatusInternalServerError, "set dialect: %v", err)
 		return
 	}
-	lints, err := s.eng.Check(req.Text)
+	// Rule toggles are engine state, not a result filter: enabledRules has to
+	// reach harper's linter map or an off-by-default rule can never fire.
+	enRules, disRules := harperRuleNames(req.EnabledRules), harperRuleNames(req.DisabledRules)
+	if err := s.eng.SetRules(enRules, disRules, req.EnabledOnly && len(enRules) > 0); err != nil {
+		writeError(w, http.StatusInternalServerError, "set rules: %v", err)
+		return
+	}
+	// One engine call per ~12k characters: harper's cost grows with the document,
+	// and a 200 KB text used to blow the LSP deadline.
+	lints, err := checkChunked(s.eng, req.Text)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine error: %v", err)
 		return
 	}
 	// The engine has no rule for wordiness or passive voice (see
 	// internal/lt/style.go); add those hints here so they travel through the same
-	// rule mapping, replacements and disabledRules filtering as everything else.
-	lints = withStyleLints(req.Text, lints)
+	// rule mapping, replacements and filter as everything else. Opt-in, like
+	// LanguageTool's picky level: default output stays the correctness tier.
+	if styleRequested(req) {
+		lints = withStyleLints(req.Text, lints)
+	}
 
 	resp := s.buildResponse(req, lints)
 	writeJSON(w, 200, resp)
@@ -253,9 +311,14 @@ func parseCheckRequest(r *http.Request) (CheckRequest, error) {
 		}
 		req.Text = r.Form.Get("text")
 		req.Language = r.Form.Get("language")
+		req.Level = r.Form.Get("level")
 		req.MotherTongue = r.Form.Get("motherTongue")
+		req.PreferredVariants = r.Form.Get("preferredVariants")
+		req.EnabledOnly = truthy(r.Form.Get("enabledOnly"))
 		req.EnabledRules = splitRules(r.Form.Get("enabledRules"))
 		req.DisabledRules = splitRules(r.Form.Get("disabledRules"))
+		req.EnabledCategories = splitRules(r.Form.Get("enabledCategories"))
+		req.DisabledCategories = splitRules(r.Form.Get("disabledCategories"))
 		return req, nil
 	default:
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -278,7 +341,22 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			disabled[id] = true
 		}
 	}
-	useEnable := len(req.EnabledRules) > 0
+	enabledCat := map[string]bool{}
+	for _, id := range req.EnabledCategories {
+		if id != "" {
+			enabledCat[strings.ToUpper(id)] = true
+		}
+	}
+	disabledCat := map[string]bool{}
+	for _, id := range req.DisabledCategories {
+		if id != "" {
+			disabledCat[strings.ToUpper(id)] = true
+		}
+	}
+	// enabledOnly means "nothing but what I named" — by rules, by categories, or
+	// both, whichever the client sent. Plain enabledRules just adds rules.
+	useEnable := req.EnabledOnly && len(req.EnabledRules) > 0
+	useEnableCat := req.EnabledOnly && len(req.EnabledCategories) > 0
 
 	// Sentence ranges are UTF-16 offsets over the whole text; each match
 	// reports the sentence it falls in (LanguageTool always populates this).
@@ -289,10 +367,13 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 		// Clients filter by either the LanguageTool id (MORFOLOGIK_RULE_EN_US)
 		// or harper's native name (SpellCheck).
 		rule := ltRuleFor(l)
-		if disabledAny(disabled, rule.ID, l.Rule) {
+		if disabledAny(disabled, rule.ID, l.Rule) || disabledCat[strings.ToUpper(rule.Category.ID)] {
 			continue
 		}
 		if useEnable && !enabledAny(enabled, rule.ID, l.Rule) {
+			continue
+		}
+		if useEnableCat && !enabledCat[strings.ToUpper(rule.Category.ID)] {
 			continue
 		}
 		ctx := buildContext(req.Text, l.CharStart, l.CharEnd)
@@ -321,6 +402,9 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			Type: TypeInfo{TypeName: rule.TypeName},
 		})
 	}
+	// Clients render matches in the order they arrive and highlight with offsets,
+	// so the order has to be the document's order — harper's own order is not.
+	sort.SliceStable(matches, func(i, j int) bool { return matches[i].Offset < matches[j].Offset })
 	return CheckResponse{
 		Software: Software{
 			Name: "grammar-server", Version: s.version,
@@ -330,6 +414,7 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 		Language:       languageInfo(req.Language),
 		Matches:        matches,
 		SentenceRanges: ranges,
+		Warnings:       Warnings{IncompleteResults: false},
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 func main() {
 	var (
 		port    = flag.Int("port", -1, "listen port")
+		host    = flag.String("host", "", "listen host (default 127.0.0.1; 0.0.0.0 exposes it on the network)")
 		dialect = flag.String("dialect", "", "default harper dialect")
 		harper  = flag.String("harper", "", "path to harper-ls binary")
 		cfgPath = flag.String("config", "", "path to YAML config file")
@@ -34,6 +35,9 @@ func main() {
 	}
 	if *port >= 0 {
 		cfg.Port = *port
+	}
+	if *host != "" {
+		cfg.Host = *host
 	}
 	if *dialect != "" {
 		cfg.Dialect = *dialect
@@ -65,7 +69,7 @@ func main() {
 		srv.EnableRewrite(cfg.OllamaURL, cfg.RewriteModel)
 		log.Printf("rewriting with %s via %s", cfg.RewriteModel, cfg.OllamaURL)
 	}
-	addr := fmt.Sprintf(":%d", cfg.Port)
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpSrv := &http.Server{
 		Addr:         addr,
 		Handler:      corsMiddleware(srv.Handler()),
