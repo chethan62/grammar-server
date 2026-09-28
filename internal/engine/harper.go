@@ -64,8 +64,6 @@ var kindMap = map[string]string{
 	"CapitalizePersonalPronouns": "style",
 	"SentenceCapitalization":     "style",
 	"LeftRightHand":              "grammar",
-	"SpellCheckCompound":         "grammar",
-	"LackOfConjunction":          "style",
 	"Spaces":                     "typography",
 }
 
@@ -143,9 +141,8 @@ func (h *Harper) setConfig(dialect string, enabled, disabled []string, only bool
 
 // fallbackRules is the hand-written subset used when the paired CLI cannot be
 // read. Every other harper rule is simply off in that state.
-var fallbackRules = []string{"SpellCheck", "SpellCheckCompound", "The",
-	"CapitalizePersonalPronouns", "SentenceCapitalization", "LeftRightHand",
-	"Spaces", "LackOfConjunction"}
+var fallbackRules = []string{"SpellCheck", "The", "CapitalizePersonalPronouns",
+	"SentenceCapitalization", "LeftRightHand", "Spaces"}
 
 // cliBin is the harper-cli that ships beside harper-ls: it is how the rule list is
 // read, so a wrong path here means a crippled engine rather than an error.

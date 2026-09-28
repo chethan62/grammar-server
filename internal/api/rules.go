@@ -24,11 +24,6 @@ var harperToLT = map[string]ltRule{
 		Short: "Spelling mistake", IssueType: "misspelling",
 		Category: Category{ID: "TYPOS", Name: "Possible Typo"}, TypeName: "UnknownWord",
 	},
-	"SpellCheckCompound": {
-		ID: "MORFOLOGIK_RULE_EN_US", Description: "Possible spelling mistake",
-		Short: "Spelling mistake", IssueType: "misspelling",
-		Category: Category{ID: "TYPOS", Name: "Possible Typo"}, TypeName: "UnknownWord",
-	},
 	"CapitalizePersonalPronouns": {
 		ID: "I_LOWERCASE", Description: "i vs. I", IssueType: "misspelling",
 		Category: Category{ID: "TYPOS", Name: "Possible Typo"}, TypeName: "Other",
@@ -117,9 +112,10 @@ func ltRuleFor(l engine.Lint) ltRule {
 // PreferSnuck, MoreAdjective, AvoidContractions, AnotherThinkComing,
 // ViciousCircleOrCycle, AnalogAcousticBike, ViciousCycle — are unreachable.
 //
-// An explicit literal rather than an inversion of harperToLT: two harper rules
-// share one LanguageTool id (SpellCheck and SpellCheckCompound are both
-// MORFOLOGIK_RULE_EN_US) and map iteration order is random.
+// An explicit literal rather than an inversion of harperToLT: more than one harper
+// rule can present the same LanguageTool id, and picking one by iterating a map is
+// not deterministic. internal/api/rules_drift_test.go checks every target is a rule
+// harper still ships.
 var ltToHarper = map[string]string{
 	"MORFOLOGIK_RULE_EN_US":    "SpellCheck",
 	"I_LOWERCASE":              "CapitalizePersonalPronouns",
