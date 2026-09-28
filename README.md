@@ -38,8 +38,9 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
 ```
 
 - `offset`/`length` are **UTF-16 code units** (matches LanguageTool/LTeX).
-- `disabledRules`/`enabledRules` filter harper rules by name
-  (`SpellCheck`, `The`, `SentenceCapitalization`, …).
+- `disabledRules`/`enabledRules` filter by rule ID — either LanguageTool's
+  (`MORFOLOGIK_RULE_EN_US`) or harper's native name (`SpellCheck`, `The`,
+  `SentenceCapitalization`, …).
 - `language` selects the harper dialect (`en-US` → American, `en-GB` → British, …).
 - `replacements[]` come from harper-ls code actions.
 
@@ -109,9 +110,11 @@ systemctl --user enable --now grammar-server
 ## Limitations
 
 - English only (harper's dialects: US/UK/CA/AU/IN).
-- No `sentenceRanges` yet (harper's sentence segmentation isn't exposed via LSP).
-- Rule IDs are harper's, not LanguageTool's (`SpellCheck` vs `MORFOLOGIK_RULE_EN_US`),
-  so client-side rule-preference UI may not match by name.
+- Rule IDs are mapped to LanguageTool's where a counterpart exists
+  (`SpellCheck` → `MORFOLOGIK_RULE_EN_US`, `SentenceCapitalization` →
+  `UPPERCASE_SENTENCE_START`, …); rules without a LanguageTool counterpart
+  keep harper's ID. `enabledRules`/`disabledRules` accept either spelling.
+- `rule.urls` and `contextForSureMatch` are not populated.
 
 ## Layout
 

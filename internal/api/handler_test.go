@@ -18,10 +18,17 @@ import (
 // checkMatch is the subset of a LanguageTool match the tests assert on.
 type checkMatch struct {
 	Rule struct {
-		ID string `json:"id"`
+		ID          string `json:"id"`
+		IssueType   string `json:"issueType"`
+		Description string `json:"description"`
+		Category    struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"category"`
 	} `json:"rule"`
-	Offset       int64 `json:"offset"`
-	Length       int64 `json:"length"`
+	Offset       int64  `json:"offset"`
+	Length       int64  `json:"length"`
+	Sentence     string `json:"sentence"`
 	Replacements []struct {
 		Value string `json:"value"`
 	} `json:"replacements"`
@@ -63,7 +70,7 @@ func TestCheckMisspelling(t *testing.T) {
 
 	spellCount := 0
 	for _, m := range out.Matches {
-		if m.Rule.ID == "SpellCheck" {
+		if m.Rule.ID == "MORFOLOGIK_RULE_EN_US" { // LanguageTool id for harper's SpellCheck
 			spellCount++
 			if m.Offset != 11 && m.Offset != 21 && m.Offset != 10 {
 				// "misspeled" at 11 or 10 (harper varies); "wurd" at 21
@@ -282,12 +289,12 @@ func TestCheckRequestShapes(t *testing.T) {
 			}
 			spell := 0
 			for _, m := range out.Matches {
-				if m.Rule.ID == "SpellCheck" {
+				if m.Rule.ID == "MORFOLOGIK_RULE_EN_US" {
 					spell++
 				}
 			}
 			if spell < 2 {
-				t.Errorf("expected >=2 SpellCheck matches, got %d (%+v)", spell, out.Matches)
+				t.Errorf("expected >=2 spelling matches, got %d (%+v)", spell, out.Matches)
 			}
 		})
 	}
@@ -323,6 +330,87 @@ func TestRuleListEncodings(t *testing.T) {
 				t.Errorf("expected remaining matches after disabling SpellCheck")
 			}
 		})
+	}
+}
+
+// Rule IDs must look like LanguageTool's, not harper's — LTeX and browser
+// extensions match on rule.id/category.id and their rule-preference UIs know
+// only LanguageTool's names. Mapping table values were captured from
+// api.languagetool.org/v2/check responses.
+func TestLanguageToolRuleMapping(t *testing.T) {
+	srv := newTestServer(t)
+
+	// "i" (lowercase pronoun) -> I_LOWERCASE, "brown  fox" (2 spaces)
+	// -> CONSECUTIVE_SPACES, sentence start -> UPPERCASE_SENTENCE_START,
+	// misspelling -> MORFOLOGIK_RULE_EN_US, "He go" -> HE_VERB_AGR.
+	cases := []struct{ text, wantRule, wantIssue, wantCat string }{
+		{"this has a misspeled wurd.", "MORFOLOGIK_RULE_EN_US", "misspelling", "TYPOS"},
+		{"i agree with you.", "I_LOWERCASE", "misspelling", "TYPOS"},
+		{"the quick brown  fox jumps.", "CONSECUTIVE_SPACES", "typographical", "TYPOGRAPHY"},
+		{"He go to school every day.", "HE_VERB_AGR", "grammar", "GRAMMAR"},
+	}
+	for _, tc := range cases {
+		matches, err := postCheck(srv.URL, tc.text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, m := range matches {
+			if m.Rule.ID == tc.wantRule {
+				found = true
+				if m.Rule.IssueType != tc.wantIssue {
+					t.Errorf("%q: rule %s issueType = %q, want %q",
+						tc.text, tc.wantRule, m.Rule.IssueType, tc.wantIssue)
+				}
+				if m.Rule.Category.ID != tc.wantCat {
+					t.Errorf("%q: rule %s category = %q, want %q",
+						tc.text, tc.wantRule, m.Rule.Category.ID, tc.wantCat)
+				}
+			}
+		}
+		if !found {
+			var got []string
+			for _, m := range matches {
+				got = append(got, m.Rule.ID)
+			}
+			t.Errorf("%q: expected rule %s, got %v", tc.text, tc.wantRule, got)
+		}
+	}
+
+	// No rule id should leak harper's spelling name to clients.
+	matches, err := postCheck(srv.URL, "this has a misspeled wurd.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range matches {
+		if m.Rule.ID == "SpellCheck" {
+			t.Errorf("harper rule name leaked to clients")
+		}
+	}
+}
+
+// LanguageTool always fills in `sentence`; clients show it as the error's
+// context line.
+func TestSentenceField(t *testing.T) {
+	srv := newTestServer(t)
+	matches, err := postCheck(srv.URL, "First sentence here. Second one has misspeled word.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) < 1 {
+		t.Fatal("expected matches")
+	}
+	for _, m := range matches {
+		if m.Sentence == "" {
+			t.Errorf("rule %s: empty sentence field", m.Rule.ID)
+		}
+	}
+	// The misspelled word is in sentence 2, so its sentence must be that one.
+	for _, m := range matches {
+		if strings.Contains(m.Sentence, "misspeled") &&
+			!strings.Contains(m.Sentence, "Second") {
+			t.Errorf("sentence %q does not contain the flagged word's sentence", m.Sentence)
+		}
 	}
 }
 

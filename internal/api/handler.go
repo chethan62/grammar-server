@@ -116,34 +116,6 @@ type Category struct {
 	Name string `json:"name"`
 }
 
-// kategory maps a harper lint kind to an LT "issueType" (category name).
-func issueTypeForKind(kind string) string {
-	switch kind {
-	case "spelling", "grammar":
-		return "misspelling"
-	case "style":
-		return "style"
-	case "typography":
-		return "typography"
-	default:
-		return "style"
-	}
-}
-
-func categoryForKind(kind string) Category {
-	id := "STYLE"
-	name := "style"
-	switch kind {
-	case "grammar":
-		id, name = "GRAMMAR", "grammar"
-	case "spelling":
-		id, name = "SPELLING", "spelling"
-	case "typography":
-		id, name = "TYPOS", "typos"
-	}
-	return Category{ID: id, Name: name}
-}
-
 func dialectForLang(lang string) string {
 	switch {
 	case strings.Contains(lang, "GB"):
@@ -269,12 +241,19 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 	}
 	useEnable := len(req.EnabledRules) > 0
 
+	// Sentence ranges are UTF-16 offsets over the whole text; each match
+	// reports the sentence it falls in (LanguageTool always populates this).
+	ranges := sentenceRanges(req.Text)
+
 	matches := make([]Match, 0, len(lints))
 	for _, l := range lints {
-		if disabled[l.Rule] {
+		// Clients filter by either the LanguageTool id (MORFOLOGIK_RULE_EN_US)
+		// or harper's native name (SpellCheck).
+		rule := ltRuleFor(l)
+		if disabledAny(disabled, rule.ID, l.Rule) {
 			continue
 		}
-		if useEnable && !enabled[l.Rule] {
+		if useEnable && !enabledAny(enabled, rule.ID, l.Rule) {
 			continue
 		}
 		ctx := buildContext(req.Text, l.CharStart, l.CharEnd)
@@ -290,15 +269,17 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			Offset:       int64(l.CharStart),
 			Length:       int64(l.CharEnd - l.CharStart),
 			Message:      l.Message,
+			ShortMessage: rule.Short,
+			Sentence:     sentenceAt(req.Text, ranges, l.CharStart),
 			Replacements: reps,
 			Context:      ctx,
 			Rule: RuleInfo{
-				ID:          l.Rule,
-				Description: l.Message,
-				IssueType:   issueTypeForKind(l.Kind),
-				Category:    categoryForKind(l.Kind),
+				ID:          rule.ID,
+				Description: firstNonEmpty(rule.Description, l.Message),
+				IssueType:   rule.IssueType,
+				Category:    rule.Category,
 			},
-			Type: TypeInfo{TypeName: l.Kind},
+			Type: TypeInfo{TypeName: rule.TypeName},
 		})
 	}
 	return CheckResponse{
@@ -309,8 +290,40 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 		},
 		Language:       LangInfo{Name: langName(req.Language), Code: langCode(req.Language)},
 		Matches:        matches,
-		SentenceRanges: sentenceRanges(req.Text),
+		SentenceRanges: ranges,
 	}
+}
+
+// enabledAny/disabledAny match a filter entry against both rule id spellings.
+func enabledAny(enabled map[string]bool, ltID, harperID string) bool {
+	return enabled[ltID] || enabled[harperID]
+}
+
+func disabledAny(disabled map[string]bool, ltID, harperID string) bool {
+	return disabled[ltID] || disabled[harperID]
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// sentenceAt returns the sentence containing the UTF-16 offset pos, using the
+// precomputed ranges. Falls back to the whole text if no range matches.
+func sentenceAt(text string, ranges [][]int64, pos int) string {
+	for _, r := range ranges {
+		if len(r) != 2 {
+			continue
+		}
+		if pos >= int(r[0]) && pos < int(r[1]) {
+			return text[u16ToByte(text, int(r[0])):u16ToByte(text, int(r[1]))]
+		}
+	}
+	return text
 }
 
 // buildContext returns a window of text around the match with relative offsets
