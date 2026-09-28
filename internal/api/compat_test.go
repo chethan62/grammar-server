@@ -273,3 +273,29 @@ func TestLongDocumentKeepsOffsets(t *testing.T) {
 			found, len(out.Matches))
 	}
 }
+
+// Every response is sorted by offset, hints or no hints. harper's own order is not
+// document order, and a style hint is appended after the engine's findings, so the
+// list is genuinely out of order until the handler sorts it — this is the one place
+// that does, now that withStyleLints no longer keeps a second copy of the invariant.
+func TestMatchesAreOffsetSorted(t *testing.T) {
+	srv := newTestServer(t)
+	// The hint lands at offset 0 and the grammar finding at 26: appending puts them
+	// in the wrong order, so a response that is sorted can only come from the sort.
+	text := "In order to test this, he have a problem."
+
+	resp, out := postCheckJSON(t, srv.URL, `{"text":"`+text+`","language":"en-US","level":"picky"}`)
+	resp.Body.Close()
+	if len(out.Matches) < 2 {
+		t.Fatalf("want the hint and the grammar finding, got %+v", out.Matches)
+	}
+	if first := out.Matches[0]; first.Offset != 0 || first.Rule.ID != "WORDINESS" {
+		t.Errorf("first match = %s at %d, want WORDINESS at 0: %+v", first.Rule.ID, first.Offset, out.Matches)
+	}
+	for i := 1; i < len(out.Matches); i++ {
+		if out.Matches[i].Offset < out.Matches[i-1].Offset {
+			t.Errorf("match %d at offset %d follows %d: %+v",
+				i, out.Matches[i].Offset, out.Matches[i-1].Offset, out.Matches)
+		}
+	}
+}

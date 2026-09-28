@@ -1,18 +1,19 @@
 package api
 
 import (
-	"sort"
 	"unicode/utf16"
 
 	"grammar-server/internal/engine"
 	"grammar-server/internal/lt"
 )
 
-// withStyleLints adds the deterministic style hints to the engine's findings and
-// returns everything in offset order. Clients render matches in the order they
-// arrive, so an unsorted append would park every hint after the real errors.
+// withStyleLints adds the deterministic style hints to the engine's findings.
 //
-// The hints come from internal/lt and never touch the engine: a table plus two
+// It does not sort. The check handler sorts the finished matches by offset, and
+// that is the single place that must (harper's own order is not document order);
+// sorting here as well was a second copy of the same invariant, waiting to drift.
+//
+// The hints come from internal/lt and never touch the engine: two tables plus two
 // regular expressions, microseconds, and nothing to fail.
 func withStyleLints(text string, lints []engine.Lint) []engine.Lint {
 	findings := lt.StyleFindings(text)
@@ -48,6 +49,5 @@ func withStyleLints(text string, lints []engine.Lint) []engine.Lint {
 			Replacements: f.Replacements,
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].CharStart < out[j].CharStart })
 	return out
 }
