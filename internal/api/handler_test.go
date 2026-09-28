@@ -57,12 +57,12 @@ func TestCheckMisspelling(t *testing.T) {
 			Rule struct {
 				ID string `json:"id"`
 			} `json:"rule"`
-			Offset        int64 `json:"offset"`
-			Length        int64 `json:"length"`
-			Replacements  []struct{ Value string } `json:"replacements"`
-			SentenceRanges [][]int64 `json:"sentenceRanges"`
+			Offset         int64                    `json:"offset"`
+			Length         int64                    `json:"length"`
+			Replacements   []struct{ Value string } `json:"replacements"`
+			SentenceRanges [][]int64                `json:"sentenceRanges"`
 		} `json:"matches"`
-		Software       struct{ Version string } `json:"software"`
+		Software struct{ Version string } `json:"software"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
@@ -142,7 +142,9 @@ func TestSentenceRanges(t *testing.T) {
 	if resp != nil {
 		defer resp.Body.Close()
 	}
-	var out struct{ SentenceRanges [][]int64 `json:"sentenceRanges"` }
+	var out struct {
+		SentenceRanges [][]int64 `json:"sentenceRanges"`
+	}
 	json.NewDecoder(resp.Body).Decode(&out)
 	if len(out.SentenceRanges) < 2 {
 		t.Errorf("expected at least 2 ranges, got %d: %v", len(out.SentenceRanges), out.SentenceRanges)
@@ -154,7 +156,9 @@ func TestSentenceRanges(t *testing.T) {
 	if resp2 != nil {
 		defer resp2.Body.Close()
 	}
-	var out2 struct{ SentenceRanges [][]int64 `json:"sentenceRanges"` }
+	var out2 struct {
+		SentenceRanges [][]int64 `json:"sentenceRanges"`
+	}
 	json.NewDecoder(resp2.Body).Decode(&out2)
 	if len(out2.SentenceRanges) != 3 {
 		t.Errorf("expected 3 ranges for 'A. B. C.', got %d: %v", len(out2.SentenceRanges), out2.SentenceRanges)

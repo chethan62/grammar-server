@@ -153,8 +153,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v2/check", s.handleCheck)
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
-	mux.HandleFunc("/status", s.handleRoot)   // old health endpoint
-	mux.HandleFunc("/", s.serveUI)            // single-page UI
+	mux.HandleFunc("/status", s.handleRoot) // old health endpoint
+	mux.HandleFunc("/", s.serveUI)          // single-page UI
 	return logRequests(mux)
 }
 
@@ -217,10 +217,10 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.eng.SetDialect(dialectForLang(req.Language)); err != nil {
-			writeError(w, http.StatusInternalServerError, "set dialect: %v", err)
-			return
-		}
-		lints, err := s.eng.Check(req.Text)
+		writeError(w, http.StatusInternalServerError, "set dialect: %v", err)
+		return
+	}
+	lints, err := s.eng.Check(req.Text)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine error: %v", err)
 		return
@@ -314,7 +314,7 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 	return CheckResponse{
 		Software: Software{
 			Name: "grammar-server", Version: s.version,
-			BuildDate: time.Now().UTC().Format(time.RFC3339),
+			BuildDate:  time.Now().UTC().Format(time.RFC3339),
 			APIVersion: 2, Status: "OK",
 		},
 		Language:       LangInfo{Name: langName(req.Language), Code: langCode(req.Language)},

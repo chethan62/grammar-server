@@ -14,20 +14,20 @@ import (
 
 // Message is a JSON-RPC 2.0 message (request, response, or notification).
 type Message struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      *int64          `json:"id,omitempty"`
-	Method  string          `json:"method,omitempty"`
-	Params  json.RawMessage `json:"params,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
+	JSONRPC string           `json:"jsonrpc"`
+	ID      *int64           `json:"id,omitempty"`
+	Method  string           `json:"method,omitempty"`
+	Params  json.RawMessage  `json:"params,omitempty"`
+	Result  json.RawMessage  `json:"result,omitempty"`
 	Error   *json.RawMessage `json:"error,omitempty"`
 }
 
 // Client is a blocking JSON-RPC client over a subprocess's stdio.
 type Client struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	mu     sync.Mutex // guards id counter + pending map
-	nextID int64
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	mu      sync.Mutex // guards id counter + pending map
+	nextID  int64
 	pending map[int64]chan Message
 	// serverRequests carries server→client requests (e.g. workspace/configuration).
 	ServerRequests chan Message

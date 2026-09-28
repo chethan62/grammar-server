@@ -47,8 +47,8 @@ type Harper struct {
 }
 
 var kindMap = map[string]string{
-	"SpellCheck":                "grammar",
-	"The":                       "grammar",
+	"SpellCheck":                 "grammar",
+	"The":                        "grammar",
 	"CapitalizePersonalPronouns": "style",
 	"SentenceCapitalization":     "style",
 	"LeftRightHand":              "grammar",
@@ -234,7 +234,7 @@ loop:
 		case m := <-h.c.Notifications:
 			if m.Method == "textDocument/publishDiagnostics" {
 				var p struct {
-					URI          string            `json:"uri"`
+					URI         string            `json:"uri"`
 					Diagnostics []json.RawMessage `json:"diagnostics"`
 				}
 				if json.Unmarshal(m.Params, &p) == nil && p.URI == uri {
