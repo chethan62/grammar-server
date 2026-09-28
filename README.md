@@ -36,7 +36,7 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
 ```json
 {"text": "…", "language": "en-US", "enabledRules": [], "disabledRules": [],
  "enabledCategories": [], "disabledCategories": [], "enabledOnly": false,
- "level": "default", "motherTongue": "de-DE", "preferredVariants": "en-US"}
+ "level": "default", "motherTongue": "de-DE", "preferredVariants": ["en-US"]}
 ```
 
 - `offset`/`length` are **UTF-16 code units** (matches LanguageTool/LTeX).
@@ -49,8 +49,13 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
   `GRAMMAR`/`TYPOS`/`STYLE`/…, and `enabledOnly` runs nothing but what was asked for.
 - `level=picky` adds the style tier (see below). Everything else is the
   correctness tier, so an editor client is never shown hints it did not ask for.
-- `motherTongue` and `preferredVariants` are accepted and ignored — they are part of
-  the client contract, not a behaviour this server has.
+- `preferredVariants` is LanguageTool's spelling-variant preference, and it is the
+  dialect: the first entry we can check wins (`["en-GB"]` → British), the rest are
+  ignored, as are variants for languages we do not check. It accepts an array or a
+  comma-separated string, like every other list parameter. `motherTongue` is
+  accepted and ignored — it is part of the client contract, not a behaviour this
+  server has.
+- `GET /status` reports the dialect the engine is currently configured for.
 - `replacements[]` come from harper-ls code actions.
 - A text longer than the engine can hold in one call is checked in sentence-aligned
   chunks (~12 KB), so offsets stay correct into the hundreds of kilobytes.
@@ -92,6 +97,12 @@ Design notes:
 - **Localhost by default** — `--host 0.0.0.0` to expose it deliberately.
 - **Unique URI per check** — harper-ls publishes diagnostics tagged by document URI;
   reusing one URI lets concurrent checks cross-match stale publishes (was a real bug).
+- **Checks are serialized by design** — one harper-ls behind one mutex. Measured here with
+  65-word documents at `level=picky`: p50 62 ms / p95 102 ms with one request in flight,
+  p95 ≤ 190 ms at 4 in flight, ~20 checks/s aggregate with 96 requests at 32 in flight, and
+  no failures or timeouts. Past ~4 in flight latency queues rather than degrading, so one
+  editor session (LTeX+ keeps about one check per debounce) is well inside it; running more
+  than one engine is the upgrade path if this ever serves several clients at once.
 - **UTF-16 offsets** — LSP positions are UTF-16 code units; LanguageTool clients (LTeX)
   expect UTF-16 too. `lineCharToU16Offset` converts line/char → flat UTF-16 offset.
 - **FlatConfig trap** — harper-ls treats linter rules not listed in config as disabled,

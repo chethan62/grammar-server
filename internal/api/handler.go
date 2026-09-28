@@ -15,9 +15,11 @@ import (
 	"grammar-server/internal/rewrite"
 )
 
-// ruleList accepts both LanguageTool encodings of a rule list: a JSON array
-// ({"enabledRules":["The"]}) and a comma-separated string ("The,SpellCheck"),
-// which is what form-encoded/query clients send.
+// ruleList accepts both LanguageTool encodings of a list parameter — rules,
+// categories, preferred variants: a JSON array ({"enabledRules":["The"]}) and a
+// comma-separated string ("The,SpellCheck"), which is what form-encoded and query
+// clients send. A plain string field 400s the array, which is the shape every
+// JSON client uses.
 type ruleList []string
 
 func (l *ruleList) UnmarshalJSON(b []byte) error {
@@ -90,7 +92,7 @@ type CheckRequest struct {
 	EnabledOnly        bool     `json:"enabledOnly"`        // nothing but the rules/categories named above
 	Level              string   `json:"level"`              // "" or "default"; "picky" adds the style tier
 	MotherTongue       string   `json:"motherTongue"`       // accepted; no rule uses it yet
-	PreferredVariants  string   `json:"preferredVariants"`  // accepted; only meaningful with language=auto
+	PreferredVariants  ruleList `json:"preferredVariants"`  // spelling-variant preference, e.g. ["en-GB"]
 }
 
 // CheckResponse mirrors the LanguageTool /v2/check response.
@@ -195,6 +197,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"service": "grammar-server",
 		"status":  "OK",
 		"version": s.version,
+		"dialect": s.eng.Dialect(),
 		"endpoints": []string{
 			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
 			"POST /v2/stats", "GET /v2/languages", "GET /status",
@@ -297,7 +300,17 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		writeLTError(w, http.StatusBadRequest, "level must be 'default' or 'picky', got '%s'", req.Level)
 		return
 	}
-	if err := s.eng.SetDialect(lang.Dialect); err != nil {
+	// preferredVariants is LanguageTool's spelling-variant preference, so it is the
+	// dialect: take the first entry we can check and ignore the rest, as LT ignores
+	// variants it does not know.
+	dialect := lang.Dialect
+	for _, v := range req.PreferredVariants {
+		if l, ok := lt.Lookup(v); ok {
+			dialect = l.Dialect
+			break
+		}
+	}
+	if err := s.eng.SetDialect(dialect); err != nil {
 		writeError(w, http.StatusInternalServerError, "set dialect: %v", err)
 		return
 	}
@@ -342,7 +355,7 @@ func parseCheckRequest(r *http.Request) (CheckRequest, error) {
 		req.Language = r.Form.Get("language")
 		req.Level = r.Form.Get("level")
 		req.MotherTongue = r.Form.Get("motherTongue")
-		req.PreferredVariants = r.Form.Get("preferredVariants")
+		req.PreferredVariants = splitRules(r.Form.Get("preferredVariants"))
 		req.EnabledOnly = truthy(r.Form.Get("enabledOnly"))
 		req.EnabledRules = splitRules(r.Form.Get("enabledRules"))
 		req.DisabledRules = splitRules(r.Form.Get("disabledRules"))

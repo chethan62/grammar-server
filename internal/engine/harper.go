@@ -189,6 +189,15 @@ func (h *Harper) ruleList() (map[string]ruleInfo, error) {
 	return h.rules, h.ruleErr
 }
 
+// Dialect reports the dialect the engine is currently configured for. The check
+// handler sets it per request — from `language`, or from preferredVariants — so it
+// is runtime state worth being able to see and assert on.
+func (h *Harper) Dialect() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.dialect
+}
+
 // SetDialect reconfigures the engine for a different English dialect.
 func (h *Harper) SetDialect(dialect string) error {
 	h.mu.Lock()

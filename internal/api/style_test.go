@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 )
 
@@ -159,6 +160,68 @@ func TestPreferredTermHint(t *testing.T) {
 			}
 		})
 	}
+}
+
+// preferredVariants is LanguageTool's spelling-variant preference, and every JSON
+// client sends it as an array. It was a plain string field, so ["en-GB"] 400'd with
+// "cannot unmarshal array into Go struct field CheckRequest.preferredVariants of
+// type string" — a request LanguageTool accepts. It now parses like the other list
+// parameters and does something: the variant is the dialect.
+func TestPreferredVariantsSetTheDialect(t *testing.T) {
+	srv := newTestServer(t)
+
+	for _, tc := range []struct {
+		name, body, want string
+		form             bool
+	}{
+		{name: "json array", body: `{"text":"Hello there.","language":"en-US","preferredVariants":["en-GB"]}`, want: "British"},
+		{name: "json string", body: `{"text":"Hello there.","language":"en-US","preferredVariants":"en-GB"}`, want: "British"},
+		{name: "form encoded", form: true, want: "British"},
+		{name: "unknown variant is ignored", body: `{"text":"Hello there.","language":"en-US","preferredVariants":["fr-FR"]}`, want: "American"},
+		{name: "language alone still decides", body: `{"text":"Hello there.","language":"en-GB"}`, want: "British"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var resp *http.Response
+			if tc.form {
+				r, err := http.PostForm(srv.URL+"/v2/check", url.Values{
+					"text": {"Hello there."}, "language": {"en-US"}, "preferredVariants": {"en-GB"},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp = r
+			} else {
+				r, _ := postCheckJSON(t, srv.URL, tc.body)
+				resp = r
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("check returned %d, want 200", resp.StatusCode)
+			}
+			if got := dialectOf(t, srv.URL); got != tc.want {
+				t.Errorf("engine dialect = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func dialectOf(t *testing.T, base string) string {
+	t.Helper()
+	resp, err := http.Get(base + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Dialect string `json:"dialect"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Dialect == "" {
+		t.Fatal("/status reports no dialect, so this test proves nothing")
+	}
+	return out.Dialect
 }
 
 // Offsets are UTF-16 code units, like every other match. A rune-offset slip
