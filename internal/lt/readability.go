@@ -101,7 +101,21 @@ func Measure(text string) Stats {
 // table — the size that used to be deferred until a UI showed sentence counts:
 // that UI is /v2/stats plus grammar-ui, so it is here.
 func splitSentences(text string) []string {
-	var out []string
+	ranges := SentenceRanges(text)
+	out := make([]string, 0, len(ranges))
+	for _, r := range ranges {
+		out = append(out, text[r[0]:r[1]])
+	}
+	return out
+}
+
+// SentenceRanges returns the byte range of every sentence in text, trimmed of
+// surrounding whitespace. It is the definition of "a sentence" for this codebase:
+// the stats counts, the `sentence`/`sentenceRanges` response fields and the range
+// /v2/fix-sentence reports all come from it. Two implementations of that boundary
+// is how a client ends up replacing different text than the server fixed.
+func SentenceRanges(text string) [][2]int {
+	var out [][2]int
 	start := 0
 	for i := 0; i < len(text); i++ {
 		c := text[i]
@@ -111,15 +125,38 @@ func splitSentences(text string) []string {
 		if c == '.' && !endsSentence(text, i) {
 			continue
 		}
-		if s := strings.TrimSpace(text[start : i+1]); s != "" {
-			out = append(out, s)
+		if r, ok := trimRange(text, start, i+1); ok {
+			out = append(out, r)
 		}
 		start = i + 1
 	}
-	if s := strings.TrimSpace(text[start:]); s != "" {
-		out = append(out, s)
+	if r, ok := trimRange(text, start, len(text)); ok {
+		out = append(out, r)
 	}
 	return out
+}
+
+// trimRange trims unicode whitespace off both ends of text[start:end] and reports
+// whether anything is left.
+func trimRange(text string, start, end int) ([2]int, bool) {
+	for start < end {
+		r, size := utf8.DecodeRuneInString(text[start:])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		start += size
+	}
+	for end > start {
+		r, size := utf8.DecodeLastRuneInString(text[start:end])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		end -= size
+	}
+	if start >= end {
+		return [2]int{}, false
+	}
+	return [2]int{start, end}, true
 }
 
 // abbreviations always sit inside a sentence: after a title or a latin

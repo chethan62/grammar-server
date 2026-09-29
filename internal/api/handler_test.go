@@ -151,7 +151,10 @@ func TestSentenceRanges(t *testing.T) {
 		t.Errorf("expected at least 2 ranges, got %d: %v", len(out.SentenceRanges), out.SentenceRanges)
 	}
 
-	// Three single-letter "sentences" (edge case — no false abbreviation skip)
+	// "A. B. C." is one sentence now, not three: a single letter before the dot is
+	// an initial, the same rule that keeps "R. K. Narayan wrote novels." whole. A
+	// sentence that names initials used to be cut into fragments, and /v2/fix-sentence
+	// then fixed (and clients replaced) only the piece after the last dot.
 	resp2, _ := http.Post(srv.URL+"/v2/check", "application/json",
 		strings.NewReader(`{"text":"A. B. C.","language":"en-US"}`))
 	if resp2 != nil {
@@ -161,8 +164,8 @@ func TestSentenceRanges(t *testing.T) {
 		SentenceRanges [][]int64 `json:"sentenceRanges"`
 	}
 	json.NewDecoder(resp2.Body).Decode(&out2)
-	if len(out2.SentenceRanges) != 3 {
-		t.Errorf("expected 3 ranges for 'A. B. C.', got %d: %v", len(out2.SentenceRanges), out2.SentenceRanges)
+	if len(out2.SentenceRanges) != 1 {
+		t.Errorf("expected 1 range for 'A. B. C.' (initials), got %d: %v", len(out2.SentenceRanges), out2.SentenceRanges)
 	}
 }
 
@@ -503,8 +506,10 @@ func TestSentenceRangesUnicode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The splitter attaches the separator space to the preceding sentence.
-	want := [][]int64{{0, 10}, {10, 23}, {23, 31}}
+	// Ranges are trimmed: the separator space belongs to neither sentence, so a
+	// client replacing a range with a fixed sentence cannot swallow it and run two
+	// sentences together.
+	want := [][]int64{{0, 9}, {10, 22}, {23, 31}}
 	if len(out.SentenceRanges) != len(want) {
 		t.Fatalf("got %v, want %v", out.SentenceRanges, want)
 	}
@@ -513,11 +518,12 @@ func TestSentenceRangesUnicode(t *testing.T) {
 			t.Errorf("range %d = %v, want %v", i, r, want[i])
 		}
 	}
-	// Every range must tile the text (no gaps, ends at UTF-16 length).
+	// The ranges must not overlap, must be in order, and must end at the text's
+	// UTF-16 length (the whitespace between them is deliberately outside).
 	prev := int64(0)
-	for _, r := range out.SentenceRanges {
-		if r[0] != prev {
-			t.Errorf("range starts at %d, want %d", r[0], prev)
+	for i, r := range out.SentenceRanges {
+		if r[0] < prev {
+			t.Errorf("range %d starts at %d, before the previous range ended (%d)", i, r[0], prev)
 		}
 		prev = r[1]
 	}
@@ -609,4 +615,85 @@ func TestFixSentenceOffsetIsUTF16(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The sentence boundary used to exist twice — once here and once in internal/lt for
+// the stats — so a sentence naming initials was cut into fragments and only the piece
+// after the last dot was fixed. It is one definition now, and the answer carries the
+// range it fixed so a client replaces precisely that text.
+func TestFixSentenceFixesWholeSentencesAndReportsTheRange(t *testing.T) {
+	srv := newTestServer(t)
+	cases := []struct{ name, text, target, want, prompt string }{
+		// Harper reads the initials as typos ("R." → "RI") and the surname as one
+		// ("Rao" → "Rad"); a checker has no business rewriting names, so those
+		// suggestions are dropped while the rest of the sentence's are applied.
+		{
+			name: "initials and a surname are left alone", text: "R. K. Rao go to Mysore. He liked it.",
+			target: "go", want: "R. K. Rao go to Mysuru.", prompt: "R. K. Rao go to Mysore.",
+		},
+		// Nothing wrong that harper can name: the sentence comes back untouched, and
+		// still with the whole sentence's range rather than a fragment of it.
+		{
+			name: "a title, nothing to fix", text: "Dr. Smith go to Kenya. It was hot.",
+			target: "Kenya", want: "Dr. Smith go to Kenya.", prompt: "Dr. Smith go to Kenya.",
+		},
+		{
+			name: "the second sentence", text: "It was late. She go home.",
+			target: "go", want: "She goes home.", prompt: "She go home.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			at := strings.Index(tc.text, tc.target)
+			if at < 0 {
+				t.Fatalf("%q does not contain %q", tc.text, tc.target)
+			}
+			body, err := json.Marshal(map[string]any{
+				"text": tc.text, "offset": len(utf16.Encode([]rune(tc.text[:at]))),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.Post(srv.URL+"/v2/fix-sentence", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var out struct {
+				Fixed  string `json:"fixed"`
+				Offset int64  `json:"offset"`
+				Length int64  `json:"length"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			if out.Fixed != tc.want {
+				t.Errorf("fixed = %q, want %q", out.Fixed, tc.want)
+			}
+			if got := utf16Slice(tc.text, out.Offset, out.Length); got != tc.prompt {
+				t.Errorf("the reported range covers %q, want the sentence it fixed (%q)", got, tc.prompt)
+			}
+			if tc.name != "" && strings.Contains(tc.prompt, "R. K. Rao") && !strings.Contains(out.Fixed, "R. K. Rao") {
+				t.Errorf("the initials and surname were rewritten: %q", out.Fixed)
+			}
+		})
+	}
+}
+
+// utf16Slice returns the text covered by a UTF-16 offset and length, computed here
+// rather than with the server's own converter.
+func utf16Slice(text string, offset, length int64) string {
+	var b strings.Builder
+	n := int64(0)
+	for _, r := range text {
+		w := int64(1)
+		if r > 0xFFFF {
+			w = 2
+		}
+		if n >= offset && n < offset+length {
+			b.WriteRune(r)
+		}
+		n += w
+	}
+	return b.String()
 }

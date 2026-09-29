@@ -77,6 +77,15 @@ an initial, a decimal, a time, a URL or a file name does not start a new sentenc
 punctuation-only fragment is not a sentence. Those counts feed mean/longest sentence
 length and the Flesch/Fog scores above them.
 
+`POST /v2/fix-sentence` takes `{text, offset}` (the offset in UTF-16 code units, as
+everywhere else) and answers `{fixed, offset, length}`: harper's first suggestion for
+each finding in the sentence that contains the offset, and the range of that sentence
+so a client replaces exactly the text the server fixed. The sentence boundary is the
+same one `/v2/stats` counts with (`lt.SentenceRanges`), so "Dr. Smith wrote it." is one
+sentence, an initial or a surname is never a fragment, and a spelling guess on a name
+(`Rao` → `Rad`) is dropped rather than applied. A sentence with nothing to fix comes
+back unchanged.
+
 Other endpoints: `GET /` (an index of the endpoints below — this server is
 API-only now; the UI is a separate static page, [grammar-ui](https://github.com/chethan62/grammar-ui),
 which you point at this origin), `GET /v2/stats` (delivery metrics),

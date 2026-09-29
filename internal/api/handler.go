@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"grammar-server/internal/engine"
 	"grammar-server/internal/lt"
@@ -579,38 +581,15 @@ func writeError(w http.ResponseWriter, code int, format string, args ...any) {
 
 // --- Sentence helpers -------------------------------------------------
 
-// sentenceRanges splits text into sentences and returns UTF-16 code unit
-// offset pairs [start, end) for each sentence.
+// sentenceRanges returns UTF-16 code unit offset pairs [start, end) for the
+// sentences in text, from the one sentence definition this codebase has
+// (lt.SentenceRanges). It used to scan for periods here as well, which is how the
+// stats and the API could disagree about where a sentence starts ("Dr. Smith").
 func sentenceRanges(text string) [][]int64 {
-	var out [][]int64
-	start := 0
-	for i := 0; i < len(text); i++ {
-		c := text[i]
-		if c == '.' || c == '!' || c == '?' {
-			end := i + 1 // include punctuation
-			// skip trailing space
-			for end < len(text) && text[end] == ' ' {
-				end++
-			}
-			out = append(out, []int64{int64(u16Offset(text, start)), int64(u16Offset(text, end))})
-			start = end
-			i = end - 1 // skip ahead
-		} else if c == '\n' && i+1 < len(text) && text[i+1] == '\n' {
-			end := i + 1
-			out = append(out, []int64{int64(u16Offset(text, start)), int64(u16Offset(text, end))})
-			start = end
-			i = end - 1
-		}
-	}
-	// trailing text after last punctuation
-	if start < len(text) {
-		end := len(text)
-		for end > start && (text[end-1] == ' ' || text[end-1] == '\n') {
-			end--
-		}
-		if end > start {
-			out = append(out, []int64{int64(u16Offset(text, start)), int64(u16Offset(text, end))})
-		}
+	ranges := lt.SentenceRanges(text)
+	out := make([][]int64, 0, len(ranges))
+	for _, r := range ranges {
+		out = append(out, []int64{int64(u16Offset(text, r[0])), int64(u16Offset(text, r[1]))})
 	}
 	if len(out) == 0 {
 		out = append(out, []int64{0, int64(u16Len(text))})
@@ -670,43 +649,61 @@ func u16ToByte(text string, u16off int) int {
 	return len(text)
 }
 
-// extractSentence returns the sentence around a BYTE offset in text. A client's
-// offset is UTF-16 and must be converted first (see u16ToByte).
-func extractSentence(text string, offset int) string {
-	if offset < 0 || offset >= len(text) {
-		return text
+// leavesNamesAlone reports whether a spelling suggestion is one to leave alone: a
+// single letter ("R. K. Rao" — harper suggests "RI" for "R.") or a capitalised word
+// that is not the first in the text ("Rao" → "Rad"). Applying those rewrites names,
+// which is not a checker's call; the sentence's other suggestions still apply, so
+// "She go to the office." still becomes "She goes to the office." Grammar and
+// typography suggestions are unaffected — only spelling guesses.
+func leavesNamesAlone(text string, l engine.Lint) bool {
+	// The category the client sees, not the engine's internal kind: the LT mapping
+	// is what makes "this is a possible typo" a stable statement.
+	if ltRuleFor(l).Category.ID != "TYPOS" {
+		return false
 	}
-	s := offset
-	for s > 0 && text[s-1] != '.' && text[s-1] != '!' && text[s-1] != '?' && text[s-1] != '\n' {
-		s--
+	mt := text[u16ToByte(text, l.CharStart):u16ToByte(text, l.CharEnd)]
+	// An initial is a single letter with its dot attached: harper matches "R." as a
+	// two-rune typo, so count the letters, not the runes.
+	letters := strings.TrimFunc(mt, func(r rune) bool { return !unicode.IsLetter(r) })
+	if utf8.RuneCountInString(letters) <= 1 {
+		return true
 	}
-	e := offset
-	for e < len(text) && text[e] != '.' && text[e] != '!' && text[e] != '?' {
-		if text[e] == '\n' && e > offset {
-			break
+	r, _ := utf8.DecodeRuneInString(letters)
+	return unicode.IsUpper(r) && l.CharStart > 0
+}
+
+// sentenceAround returns the sentence containing a BYTE offset, and that sentence's
+// byte range. A client's offset is UTF-16 and must be converted first (u16ToByte).
+//
+// The boundary comes from lt.SentenceRanges, the same one the stats and the
+// response fields use, so "Dr. Smith wrote it." is one sentence here too and the
+// answer can never be a fragment the caller would replace on its own.
+func sentenceAround(text string, offset int) (string, [2]int) {
+	for _, r := range lt.SentenceRanges(text) {
+		if offset >= r[0] && offset < r[1] {
+			return text[r[0]:r[1]], r
 		}
-		e++
 	}
-	if e < len(text) && (text[e] == '.' || text[e] == '!' || text[e] == '?') {
-		e++
-	}
-	for s < e && (text[s] == ' ' || text[s] == '.' || text[s] == '!' || text[s] == '?') {
-		s++
-	}
-	return text[s:e]
+	return text, [2]int{0, len(text)}
 }
 
 // --- Fix sentence (rule-based, no AI) --------------------------------
 
-// FixSentenceRequest is the body for /v2/fix-sentence.
+// FixSentenceRequest is the body for /v2/fix-sentence. Offset is a UTF-16 code
+// unit offset, like every other offset in this API (LanguageTool's convention).
 type FixSentenceRequest struct {
 	Text   string `json:"text"`
-	Offset int    `json:"offset"` // byte offset of the error; the containing sentence is extracted
+	Offset int    `json:"offset"`
 }
 
-// FixSentenceResponse is the result from /v2/fix-sentence.
+// FixSentenceResponse is the result from /v2/fix-sentence. Offset and Length are
+// the UTF-16 range Fixed belongs to, so a client replaces exactly the text the
+// server fixed instead of computing the sentence boundary a second time — two
+// implementations of that boundary is how a fix lands on the wrong sentence.
 type FixSentenceResponse struct {
-	Fixed string `json:"fixed"`
+	Fixed  string `json:"fixed"`
+	Offset int64  `json:"offset"`
+	Length int64  `json:"length"`
 }
 
 func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
@@ -735,24 +732,27 @@ func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
 	// early, extractSentence returns the PREVIOUS sentence, and the UI swaps that
 	// sentence into the document. Convert once, here, and extractSentence works
 	// in byte offsets like the rest of the package.
-	// req.Offset is the client's offset, and the API speaks UTF-16 code units
-	// (LanguageTool's convention). Slicing the UTF-8 string with it directly was
-	// the bug: with an emoji before the error the byte index lands two bytes
-	// early, extractSentence returns the PREVIOUS sentence, and the UI swaps that
-	// sentence into the document. Convert once, here, and extractSentence works
-	// in byte offsets like the rest of the package.
-	sentence := extractSentence(req.Text, u16ToByte(req.Text, req.Offset))
+	// req.Offset is a UTF-16 code unit offset (LanguageTool's convention) and the
+	// sentence lookup works in bytes: reading it as a byte index was the bug that
+	// fixed the PREVIOUS sentence whenever the text had an emoji or an accent
+	// before the error, and the UI swapped that sentence into the document.
+	sentence, span := sentenceAround(req.Text, u16ToByte(req.Text, req.Offset))
 
 	// Run harper on just the sentence to get lints.
 	lints, err := s.eng.Check(sentence)
-	if err != nil || len(lints) == 0 {
-		writeJSON(w, 200, FixSentenceResponse{Fixed: sentence})
-		return
+	fixed := sentence
+	if err == nil && len(lints) > 0 {
+		// Apply first-replacement suggestions back-to-front (offsets stay valid).
+		fixed = applyFixes(sentence, lints)
 	}
-
-	// Apply first-replacement suggestions back-to-front (offsets stay valid).
-	fixed := applyFixes(sentence, lints)
-	writeJSON(w, 200, FixSentenceResponse{Fixed: fixed})
+	// The range travels with the answer: the client replaces [offset, offset+length)
+	// and never has to guess which sentence the server meant.
+	start := u16Offset(req.Text, span[0])
+	writeJSON(w, 200, FixSentenceResponse{
+		Fixed:  fixed,
+		Offset: int64(start),
+		Length: int64(u16Offset(req.Text, span[1]) - start),
+	})
 }
 
 // applyFixes applies the first replacement of each lint to the text,
@@ -772,6 +772,9 @@ func applyFixes(text string, lints []engine.Lint) string {
 	for i := range sorted {
 		l := &sorted[i]
 		if len(l.Replacements) == 0 || l.CharStart < 0 {
+			continue
+		}
+		if leavesNamesAlone(text, *l) {
 			continue
 		}
 		// CharStart/CharEnd are UTF-16 code units; convert to byte offsets
