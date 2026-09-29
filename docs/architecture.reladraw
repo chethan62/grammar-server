@@ -1,44 +1,53 @@
 // grammar-server — the architecture, 2026-09-29.
 // This file is the source; the picture is rendered from it, so they cannot drift apart:
 //   npx reladraw docs/architecture.reladraw -o docs/architecture.svg
-// Add --theme dark for a dark page. Every number is a measurement from this box (CPU-only,
-// 85-95C package temp, so up to ~2x pessimistic).
 //
-// Design: light page; one accent, on the thing that is genuinely load-bearing (the single
-// harper process behind one mutex); names in normal weight with small grey technical sublabels;
-// quiet edge labels; no free-floating remarks, because a remark with no box is a remark whose
-// subject the reader has to guess. Dependency direction: engine <- api <- clients; the HTTP API
-// is the only door between them.
+// Colour is the layer key: every box carries its own hue, and every arrow leaves in the hue of
+// the layer it comes from, so a reader can trace a line without reading its label. The tints are
+// pale and the ink is dark on purpose -- each hue was checked for contrast before it was allowed
+// in: ink >= 4.5:1 on white, body text >= 7:1 on its own tint (palette.py does that check). The
+// amber box is the one that is load-bearing: ONE harper process behind ONE mutex.
+//
+// These are hand-picked colours, so unlike theme colours they do NOT follow --theme: this file
+// is a light page. Every number is a measurement from this box (CPU-only, 85-95C package temp,
+// so up to ~2x pessimistic). Dependency direction: engine <- api <- clients; the HTTP API is the
+// only door between them.
 
 diagram  theme: light
 
-style focal    fill: theme-primary-subtle  border: theme-primary  line: theme-primary
-style sublabel fill: none  border: none  text: (size: small, color: theme-muted)
-style caption  fill: none  border: none  text: (size: small, color: theme-muted)
+style apps     fill: #e9eefb  border: #2f5fd0  line: #2f5fd0
+style watch    fill: #efe9fb  border: #6d4fd0  line: #6d4fd0
+style card     fill: #fde9f1  border: #c0407c  line: #c0407c
+style engine   fill: #e2f3ef  border: #0d8577  line: #0d8577
+style clients  fill: #e3f0fa  border: #1673a8  line: #1673a8
+style ollama   fill: #e7f3e3  border: #3f8b3a  line: #3f8b3a
+style harper   fill: #fbe6bd  border: #b0741a  line: #b0741a
+style sublabel fill: none  border: none  text: (size: small, color: #5b6472)
+style caption  fill: none  border: none  text: (size: small, color: #5b6472)
 
 node title "grammar-server" (size: large)  shape: none
 node subtitle "What is running, and what each part costs" (size: small, color: theme-muted)  below title  gap: tight  style: caption
 
-node apps "Any app you type in"  below subtitle  gap: normal
-node apps.sub "LibreOffice · Firefox · Qt"  below apps text  style: sublabel
-node watch "grammar-watch"  below apps  gap: wide
-node watch.sub "systemd user unit, reads the caret over AT-SPI"  below watch text  style: sublabel
-node card "Suggestion card"  right of watch  gap: wide
-node card.sub "GTK3, placed at the caret"  below card text  style: sublabel
-node engine "grammar-server"  below watch  gap: wide
-node engine.sub "Go :8875 · LanguageTool-compatible"  below engine text  style: sublabel
-node clients "Clients over the same API"  right of engine  gap: wide
-node clients.sub "static UI :8899 · lookup Ctrl+Alt+C"  below clients text  style: sublabel
-node ollama "ollama"  left of engine  gap: wide
-node ollama.sub "/v2/rewrite only, never the check path"  below ollama text  style: sublabel
-node harper "harper-ls"  below engine  gap: wide  style: focal
-node harper.sub "ONE process behind ONE mutex"  below harper text  style: sublabel
+node apps "Any app you type in"  below subtitle  gap: normal  style: apps
+node apps.sub "LibreOffice · Firefox · Qt" (size: small, color: #24489c)  below apps text  style: sublabel
+node watch "grammar-watch"  below apps  gap: normal  style: watch
+node watch.sub "systemd user unit, reads the caret over AT-SPI" (size: small, color: #5236ab)  below watch text  style: sublabel
+node card "Suggestion card"  right of watch  gap: normal  style: card
+node card.sub "GTK3, placed at the caret" (size: small, color: #9c2f61)  below card text  style: sublabel
+node engine "grammar-server"  below watch  gap: normal  style: engine
+node engine.sub "Go :8875 · LanguageTool-compatible" (size: small, color: #0a6f63)  below engine text  style: sublabel
+node clients "Clients over the same API"  right of engine  gap: normal  style: clients
+node clients.sub "static UI :8899 · lookup Ctrl+Alt+C" (size: small, color: #0f5c87)  below clients text  style: sublabel
+node ollama "ollama"  left of engine  gap: normal  style: ollama
+node ollama.sub "/v2/rewrite only, never the check path" (size: small, color: #357a30)  below ollama text  style: sublabel
+node harper "harper-ls"  below engine  gap: normal  style: harper
+node harper.sub "ONE process behind ONE mutex" (size: small, color: #87560d)  below harper text  style: sublabel
 node costs "200 chars 16 ms · 10 KB 1.8 s · 200 KB 36 s" (wrap: 64)  below harper  gap: tight  style: caption
 
-edge apps -> watch   "text + caret" (size: small, color: theme-muted)
-edge watch -> card    "Accept" (size: small, color: theme-muted)
-edge watch -> engine  "POST /v2/check" (size: small, color: theme-muted)
-edge engine -> harper "chunked at 1.5 KB per call" (size: small, color: theme-muted)
-edge clients -> engine "the same API" (size: small, color: theme-muted)
-edge engine -> ollama  "on demand" (size: small, color: theme-muted)
-edge harper -> costs   "measured here" (size: small, color: theme-muted)
+edge apps -> watch    "text + caret" (size: small, color: #24489c)  style: apps
+edge watch -> card     "Accept" (size: small, color: #5236ab)  style: watch
+edge watch -> engine   "POST /v2/check" (size: small, color: #5236ab)  style: watch
+edge engine -> harper  "chunked at 1.5 KB per call" (size: small, color: #0a6f63)  style: engine
+edge clients -> engine "the same API" (size: small, color: #0f5c87)  style: clients
+edge engine -> ollama  "on demand" (size: small, color: #357a30)  style: ollama
+edge harper -> costs   "measured here" (size: small, color: #87560d)  style: harper
