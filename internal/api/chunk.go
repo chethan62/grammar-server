@@ -57,6 +57,22 @@ func checkChunked(eng *engine.Harper, text string) ([]engine.Lint, error) {
 	return out, nil
 }
 
+// lastSpace is the index just after the last space, tab or newline in text[start:i],
+// or start when there is none. The whitespace stays in the earlier chunk, so the
+// next chunk begins on a word rather than with a leading space.
+//
+// A byte scan is safe here: every byte it matches is ASCII, and an ASCII byte can
+// never be part of a multi-byte rune.
+func lastSpace(text string, start, i int) int {
+	for j := i - 1; j > start; j-- {
+		switch text[j] {
+		case ' ', '\t', '\n', '\r':
+			return j + 1
+		}
+	}
+	return start
+}
+
 // sentenceSegments splits text into byte ranges of at most chunkBytes, cutting
 // after a sentence end where one is available. Every boundary lands on a rune
 // start, so no multi-byte character is ever split. A sentence longer than a chunk
@@ -79,7 +95,19 @@ func sentenceSegments(text string) [][2]int {
 		// past i — the cut has to stay inside the budget and on a rune boundary.
 		end := cut
 		if end <= start || end > i {
-			end = i
+			// No sentence end inside this chunk — a bullet list, a table, a comma
+			// run-on, or text whose sentence end is not '.!?'. Cut at the last
+			// whitespace instead: cutting at i splits a word, and the engine then
+			// reports both halves as misspellings ("over" at a 12 KB boundary came
+			// back as 'o' and 'ver' on a text with nothing wrong with it).
+			end = lastSpace(text, start, i)
+			if end <= start {
+				// One word longer than a chunk: nothing left to cut on. The match
+				// that straddles this is dropped, so the worst case is two halves
+				// of a word the engine cannot recognise anyway (a 12 KB garbage
+				// blob), never a word from ordinary prose.
+				end = i
+			}
 		}
 		segs = append(segs, [2]int{start, end})
 		start, cut = end, -1

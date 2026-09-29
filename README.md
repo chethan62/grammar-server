@@ -61,7 +61,10 @@ query parameters work too; LT clients use all three:
 - `GET /status` reports the dialect the engine is currently configured for.
 - `replacements[]` come from harper-ls code actions.
 - A text longer than the engine can hold in one call is checked in sentence-aligned
-  chunks (~12 KB), so offsets stay correct into the hundreds of kilobytes.
+  chunks (~12 KB), so offsets stay correct into the hundreds of kilobytes. Cuts fall
+  after a sentence end, or at the last space when the text has none (bullet lists,
+  tables, comma run-ons) — never inside a word, which the engine would report as two
+  misspellings.
 
 Other endpoints: `GET /` (an index of the endpoints below — this server is
 API-only now; the UI is a separate static page, [grammar-ui](https://github.com/chethan62/grammar-ui),

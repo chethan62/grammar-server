@@ -3,6 +3,8 @@ package api
 import (
 	"strings"
 	"testing"
+
+	"grammar-server/internal/engine"
 )
 
 // The chunker is the only thing standing between a long document and the LSP
@@ -52,3 +54,92 @@ func TestSentenceSegments(t *testing.T) {
 		t.Fatalf("text with no sentence end should stay whole, got %v", segs)
 	}
 }
+
+// A chunk boundary inside a word makes the engine report both halves as
+// misspellings: "over" cut at a 12 KB boundary came back as 'o' and 'ver' on a
+// text that had nothing wrong with it. Without sentence punctuation to cut on
+// (bullet lists, tables, comma run-ons, scripts that do not use '.'),
+// the boundary must fall on whitespace.
+func TestChunkBoundariesFallOnWhitespace(t *testing.T) {
+	texts := map[string]string{
+		"no punctuation at all": strings.Repeat("alpha bravo charlie delta echo ", 2000),
+		"bulleted list":         strings.Repeat("item one here\n", 2000),
+		"comma run-on":          strings.Repeat("first, second, third, fourth, ", 1500),
+		"tabs and newlines":     strings.Repeat("col one	col two	col three\r\n", 1500),
+	}
+	for name, text := range texts {
+		t.Run(name, func(t *testing.T) {
+			segs := sentenceSegments(text)
+			if len(segs) < 3 {
+				t.Fatalf("expected several segments, got %d", len(segs))
+			}
+			for i, s := range segs {
+				if s[1] == len(text) {
+					continue // the end of the text is not a cut
+				}
+				if end := text[s[1]-1]; end != ' ' && end != '	' && end != '\n' && end != '\r' {
+					t.Errorf("segment %d ends mid-word at %q: %q…", i, end, text[s[1]-20:s[1]+8])
+				}
+				if i > 0 && text[s[0]] == ' ' {
+					t.Errorf("segment %d starts with a space", i)
+				}
+			}
+		})
+	}
+}
+
+// checkChunked had no test of its own contract, and the offsets are the contract:
+// a real error in the fourth chunk has to be reported where the client's whole
+// document has it, and no match may cover half a word.
+func TestChunkedOffsetsSurviveTheShift(t *testing.T) {
+	eng, err := engine.NewHarper("harper-ls", "American", nil)
+	if err != nil {
+		t.Skipf("harper-ls not available: %v", err)
+	}
+	defer eng.Close()
+
+	// Ordinary prose: sentence ends to cut on. (A text with no sentence end at all
+	// makes harper flag each chunk as one long sentence, and that match overlaps and
+	// swallows everything inside it — a separate matter from offsets.)
+	base := strings.Repeat("The quick brown fox jumps over a lazy dog. ", 700)
+	text := base[:len(base)-60] + " The report was teh one. " + base[len(base)-60:]
+	at := strings.Index(text, " teh ")
+	if at < chunkBytes*2 {
+		t.Fatalf("the typo must sit well past the first chunk, it is at %d", at)
+	}
+
+	lints, err := checkChunked(eng, text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ASCII throughout, so byte offset, rune offset and UTF-16 offset agree.
+	found := false
+	for _, l := range lints {
+		if l.CharStart == at+1 && l.CharEnd == at+4 && text[l.CharStart:l.CharEnd] == "teh" {
+			found = true
+		}
+		// No match may be half a word: that is what a 12 KB cut inside a word
+		// breaks ("over" came back as 'o' and 'ver'). A match that is whitespace
+		// or punctuation is fine — what is not fine is a match that starts or
+		// ends between two letters.
+		mt := text[l.CharStart:l.CharEnd]
+		if mt == "" {
+			t.Errorf("empty match at %d", l.CharStart)
+			continue
+		}
+		if isLetter(mt[0]) && l.CharStart > 0 && isLetter(text[l.CharStart-1]) {
+			t.Errorf("match %q at %d starts inside a word", mt, l.CharStart)
+		}
+		if isLetter(mt[len(mt)-1]) && l.CharEnd < len(text) && isLetter(text[l.CharEnd]) {
+			t.Errorf("match %q at %d ends inside a word", mt, l.CharStart)
+		}
+	}
+	if !found {
+		for _, l := range lints {
+			t.Logf("lint %-32s %6d-%6d %q", l.Rule, l.CharStart, l.CharEnd, text[max(0, l.CharStart):min(l.CharEnd, len(text))])
+		}
+		t.Errorf("the planted typo at %d was not reported; got %d lints", at+1, len(lints))
+	}
+}
+
+func isLetter(b byte) bool { return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' }
