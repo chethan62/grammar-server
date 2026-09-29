@@ -65,6 +65,14 @@ query parameters work too; LT clients use all three:
   server has.
 - `GET /status` reports the dialect the engine is currently configured for.
 - `replacements[]` come from harper-ls code actions.
+- Every key LanguageTool sends is present, including the ones a client reads without
+  checking: `shortMessage` (empty when the rule has no short form), `sentenceRanges`
+  and `extendedSentenceRanges`. The last mirrors the range list and names the language
+  each sentence was checked as — this server checks one language and does not guess,
+  so the rate is always 1.0. Two LanguageTool fields are deliberately absent:
+  `ignoreForIncompleteSentence` and `contextForSureMatch`, which LanguageTool varies
+  per rule and this server has no source for; an invented constant would be worse than
+  an omitted optional field, which clients read as falsy.
 - A text longer than the engine can hold in one call is checked in sentence-aligned
   chunks (~12 KB), so offsets stay correct into the hundreds of kilobytes. Cuts fall
   after a sentence end, or at the last space when the text has none (bullet lists,
