@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -61,12 +62,58 @@ func KeyEnvFor(provider string) string {
 	return ""
 }
 
-// APIKeyFor reads that variable. The key is never stored in config or returned
-// by the API — the environment is the only place it lives, which is why the
-// settings endpoint reports keySet as a boolean and never the value.
+// KeyFilePath is where a key entered through the settings API is kept, and the write path too:
+// one owner for "where a key comes from", so no caller invents a second location.
+//
+// It is a separate file from ai.json, mode 0600, because a secret does not belong in a config file
+// that a settings UI reads back. Nothing stores it in the JSON, nothing returns it over HTTP, and
+// the only way to set it is a loopback request.
+func KeyFilePath() string {
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	return filepath.Join(dir, "grammar-server", "ai.key")
+}
+
+// SaveKey writes a key for the current backend. 0600 from the first byte written: the file is
+// never briefly readable by anyone else.
+func SaveKey(key string) error {
+	path := KeyFilePath()
+	if path == "" {
+		return os.ErrNotExist
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(strings.TrimSpace(key)+"\n"), 0o600); err != nil {
+		return err
+	}
+	// WriteFile does not tighten the mode of a file that already exists, and a wholesale edit or a
+	// restored backup can leave one world-readable. A secret's permissions are not a suggestion.
+	return os.Chmod(path, 0o600)
+}
+
+// APIKeyFor reads the environment first, then that file. The environment still wins: a key set
+// that way before the settings API existed keeps working, and keeps meaning what it meant.
 func APIKeyFor(provider string) string {
-	if env := KeyEnvFor(provider); env != "" {
-		return strings.TrimSpace(getenv(env))
+	env := KeyEnvFor(provider)
+	if env == "" {
+		return ""
+	}
+	if value := strings.TrimSpace(getenv(env)); value != "" {
+		return value
+	}
+	path := KeyFilePath()
+	if path == "" {
+		return ""
+	}
+	if b, err := os.ReadFile(path); err == nil {
+		return strings.TrimSpace(string(b))
 	}
 	return ""
 }

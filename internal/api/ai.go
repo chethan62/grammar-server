@@ -27,10 +27,16 @@ import (
 
 // AISetting is the body of POST /v1/ai. An empty url or model falls back to the
 // provider's default, so a client only has to name the product.
+//
+// APIKey is how a custom OpenAI-compatible endpoint gets its credential: it is written to its own
+// file (mode 0600) and never stored in the settings JSON, never returned by any endpoint, and
+// settable only from this machine. An empty value means "leave whatever is there alone", so a
+// panel that shows a password box can send the form without wiping a key it never displayed.
 type AISetting struct {
 	Provider string `json:"provider"`
 	URL      string `json:"url"`
 	Model    string `json:"model"`
+	APIKey   string `json:"apiKey,omitempty"`
 }
 
 // AIState is the answer to GET /v1/ai: everything a settings panel needs, and
@@ -171,7 +177,11 @@ func (s *Server) setAI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if preset.KeyEnv != "" && rewrite.APIKeyFor(in.Provider) == "" {
+	// Whether a key is present has to account for one arriving in this very request: applyAI
+	// saves it a line later, so checking only what is on disk made the response contradict itself
+	// (keySet true, and a warning saying no key was set).
+	keyPresent := strings.TrimSpace(in.APIKey) != "" || rewrite.APIKeyFor(in.Provider) != ""
+	if preset.KeyEnv != "" && !keyPresent {
 		// Not fatal: some proxies want no key. Worth saying out loud anyway,
 		// because the failure it causes (401 at rewrite time) is far from here.
 		writeJSON(w, 200, s.applyAI(r, in, "no "+preset.KeyEnv+" in the server's environment — rewriting will answer 503 until you set it and restart"))
@@ -182,13 +192,33 @@ func (s *Server) setAI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) applyAI(r *http.Request, in AISetting, warning string) AIState {
+	// The one funnel for applying a backend, so the key is handled here rather than at each
+	// success path. It is written before the state is read back, so keySet in the response is the
+	// truth rather than a guess.
+	if strings.TrimSpace(in.APIKey) != "" {
+		if err := rewrite.SaveKey(in.APIKey); err != nil {
+			// Not fatal — the backend still changes — but it must be visible: a key that looks
+			// accepted and silently does not survive a restart is the worst of both.
+			warning = joinWarning(warning, "the API key could not be saved ("+err.Error()+
+				"), so it will not survive a restart")
+		}
+	}
 	s.SetRewrite(in.Provider, in.URL, in.Model)
+	in.APIKey = "" // never in ai.json: a config file a settings UI reads back holds no secrets
 	_ = saveAI(in) // a failed save must not fail the change: rewriting works now, it just will not survive a restart
 	st := s.aiState(r)
 	if warning != "" {
 		st.Hint = warning + ". " + st.Hint
 	}
 	return st
+}
+
+// joinWarning keeps both messages when two things need saying.
+func joinWarning(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "; " + b
 }
 
 // isLoopback reports whether a request came from this machine.
