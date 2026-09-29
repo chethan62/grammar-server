@@ -43,14 +43,18 @@ const chunkBytes = 1_500
 // Splitting only at sentence ends means no word is ever cut in half, and a match
 // that still straddles a boundary is dropped rather than reported at an offset
 // that points at the wrong characters.
-func checkChunked(eng *engine.Harper, text string) ([]engine.Lint, error) {
+func (s *Server) checkChunked(text string) ([]engine.Lint, error) {
+	// Read once per request, not per chunk: it is engine state and cannot change
+	// while this call is running.
+	fp := s.eng.Fingerprint()
 	if len(text) <= chunkBytes {
-		return eng.Check(text)
+		// One chunk is the whole document, so its offsets are already absolute.
+		return s.checkCached(fp, text)
 	}
 	var out []engine.Lint
 	seen := map[string]bool{}
 	for _, seg := range sentenceSegments(text) {
-		lints, err := eng.Check(text[seg[0]:seg[1]])
+		lints, err := s.checkCached(fp, text[seg[0]:seg[1]])
 		if err != nil {
 			return nil, err
 		}
@@ -73,6 +77,24 @@ func checkChunked(eng *engine.Harper, text string) ([]engine.Lint, error) {
 		}
 	}
 	return out, nil
+}
+
+// checkCached is the engine's verdict on one chunk, from the cache when that
+// exact chunk was already checked under that exact configuration. A hit and a
+// miss return the same value, because only the shift-and-collect loop above ever
+// post-processes a chunk's lints — the cache sits underneath that loop, never
+// beside it.
+func (s *Server) checkCached(fp, chunk string) ([]engine.Lint, error) {
+	key := lintKey(fp, chunk)
+	if lints, ok := s.cache.get(key); ok {
+		return lints, nil
+	}
+	lints, err := s.eng.Check(chunk)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.put(key, lints)
+	return lints, nil
 }
 
 // lastSpace is the index just after the last space, tab or newline in text[start:i],

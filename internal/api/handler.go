@@ -206,6 +206,10 @@ type Server struct {
 	// so it is read under rwMu and never called directly. rwProvider/rwURL/rwModel
 	// travel with it because the /v1/ai endpoint reports them, and a client
 	// interface alone cannot name the backend it is.
+	// cache holds the engine's verdict per (configuration, chunk), so a client
+	// re-sending a document only pays for the parts that changed.
+	cache *lintCache
+
 	rwMu       sync.Mutex
 	rw         rewrite.Rewriter
 	rwProvider string
@@ -219,7 +223,7 @@ type Server struct {
 var Version = "dev"
 
 func NewServer(eng *engine.Harper) *Server {
-	return &Server{eng: eng, version: Version}
+	return &Server{eng: eng, version: Version, cache: newLintCache(defaultCacheEntries)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -240,7 +244,11 @@ func (s *Server) Handler() http.Handler {
 // moved to its own repository (grammar-ui): the server is API-only now, so any
 // UI — or none — can point at it.
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
+	// The chunk cache earns its place only if its effect is visible; a hit rate
+	// nobody can read is indistinguishable from a cache that never works.
+	entries, hits, misses := s.cache.stats()
 	writeJSON(w, 200, map[string]any{
+		"cache":   map[string]any{"entries": entries, "hits": hits, "misses": misses},
 		"service": "grammar-server",
 		"status":  "OK",
 		"version": s.version,
@@ -376,7 +384,7 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	// One engine call per ~12k characters: harper's cost grows with the document,
 	// and a 200 KB text used to blow the LSP deadline.
-	lints, err := checkChunked(s.eng, req.Text)
+	lints, err := s.checkChunked(req.Text)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine error: %v", err)
 		return

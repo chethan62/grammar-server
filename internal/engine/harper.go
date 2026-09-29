@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,6 +44,7 @@ type Harper struct {
 	c       *lsp.Client
 	version int
 	config  json.RawMessage // {"harper-ls":{...}} full wrapper
+	fp      string          // sha256 of config: what tells two rule sets apart
 	bin     string
 	dialect string   // current dialect (for reconnects)
 	en      []string // rule names switched on by a client (kept for reconnects)
@@ -65,6 +67,17 @@ var kindMap = map[string]string{
 	"SentenceCapitalization":     "style",
 	"LeftRightHand":              "grammar",
 	"Spaces":                     "typography",
+}
+
+// Fingerprint names the configuration a lint was produced under. Rules and
+// dialect are engine state, not per-request filters, so identical text can
+// legitimately lint differently after a rule change — a cache keyed on text
+// alone would serve the old answer as if it were current. Everything that can
+// change a result is inside config, so this is the whole of it, hashed.
+func (h *Harper) Fingerprint() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.fp
 }
 
 // NewHarper spawns harper-ls and completes the LSP handshake.
@@ -134,6 +147,9 @@ func (h *Harper) setConfig(dialect string, enabled, disabled []string, only bool
 	h.config, _ = json.Marshal(map[string]any{
 		"harper-ls": map[string]any{"linters": linters, "dialect": dialect},
 	})
+	// Derived here, in the one place the config is built, so it cannot drift from
+	// it: every rule toggle and dialect change passes through this line.
+	h.fp = fmt.Sprintf("%x", sha256.Sum256(h.config))
 	return h.c.Notify("workspace/didChangeConfiguration", map[string]any{
 		"settings": json.RawMessage(h.config),
 	})

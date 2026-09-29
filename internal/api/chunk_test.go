@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -108,7 +109,8 @@ func TestChunkedOffsetsSurviveTheShift(t *testing.T) {
 		t.Fatalf("the typo must sit well past the first chunk, it is at %d", at)
 	}
 
-	lints, err := checkChunked(eng, text)
+	srv := NewServer(eng)
+	lints, err := srv.checkChunked(text)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,6 +141,20 @@ func TestChunkedOffsetsSurviveTheShift(t *testing.T) {
 			t.Logf("lint %-32s %6d-%6d %q", l.Rule, l.CharStart, l.CharEnd, text[max(0, l.CharStart):min(l.CharEnd, len(text))])
 		}
 		t.Errorf("the planted typo at %d was not reported; got %d lints", at+1, len(lints))
+	}
+
+	// The same document again: every chunk is still cached, so this pass takes the
+	// hit path and has to produce exactly the same lints. A cache that changes the
+	// answer is worse than no cache, and this is the assertion that says so.
+	again, err := srv.checkChunked(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(lints, again) {
+		t.Fatalf("the cached pass differs from the first: %d lints vs %d", len(again), len(lints))
+	}
+	if entries, hits, _ := srv.cache.stats(); entries == 0 || hits == 0 {
+		t.Fatalf("the second pass did not come from the cache: %d entries, %d hits", entries, hits)
 	}
 }
 
