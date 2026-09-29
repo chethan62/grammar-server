@@ -125,7 +125,7 @@ def build():
         'node engine "grammar-server"  below watch  gap: normal  style: engine',
         'node engine.sub "Go :8875 · LanguageTool-compatible" (size: small, color: %s)  below engine text  style: sublabel' % LAYERS["engine"]["ink"],
         'node clients "Clients over the same API"  right of engine  gap: normal  style: clients',
-        'node clients.sub "static UI :8899 · lookup Ctrl+Alt+C" (size: small, color: %s)  below clients text  style: sublabel' % LAYERS["clients"]["ink"],
+        'node clients.sub "desktop card at the caret · lookup Ctrl+Alt+C · AI runner" (size: small, color: %s)  below clients text  style: sublabel' % LAYERS["clients"]["ink"],
         # The green layer is the AI tier. It used to be one hard-wired Ollama box; it is
         # now a choice of six backends behind /v1/ai, and the box says so.
         'node ai "AI backend — one of six"  left of engine  gap: normal  style: ollama',

@@ -155,45 +155,41 @@ Design notes:
 
 ## Using it from another device
 
-Both services listen dual-stack (`*:8875`, `*:8899`) and avahi advertises this machine over
-mDNS, so the address to type depends only on what the client can resolve:
+The engine listens dual-stack (`*:8875`) and avahi advertises this machine over mDNS, so another
+machine — or a phone — can check text through the API:
 
-| client | type |
+| client | base URL |
 |---|---|
-| this machine | `http://localhost:8899/` |
-| Linux, Windows 10+, macOS on the network | `http://cachyos.local:8899/` — stable, survives a new DHCP lease |
-| Android, older Windows | `http://192.168.29.123:8899/` — Android does not resolve `.local`; check the address with `ip -4 addr show wlan0` |
+| this machine | `http://localhost:8875` |
+| Linux, Windows 10+, macOS on the network | `http://cachyos.local:8875` — stable, survives a new DHCP lease |
+| Android, older Windows | `http://192.168.29.123:8875` — Android does not resolve `.local`; check the address with `ip -4 addr show wlan0` |
 
-The UI derives its API address from the host that served it, so whichever of those you
-type, it points at this machine with nothing to configure — typing `localhost` into the
-API field is the one way to break it from another device. Dual-stack matters for the name:
-mDNS publishes an AAAA record, and an IPv6-preferring client that finds only an IPv4
-listener gets "connection refused" from a name that works by address.
+Dual-stack matters for the name: mDNS publishes an AAAA record, and an IPv6-preferring client
+that finds only an IPv4 listener gets "connection refused" from a name that works by address.
 
-Installing the checker on Windows or macOS is not built yet: `make bundle-windows-amd64` and
-`make bundle-darwin-arm64` cross-compile the server, but they need that platform's harper
-pair (`HARPER_DIR=...`), and the UI needs a static server there — `python -m http.server`
-if Python is installed, since the core deliberately does not serve the UI.
+There is no page to open. The clients are desktop programs in the
+[grammar-ui](https://github.com/chethan62/grammar-ui) repo — a suggestion card at the caret, a
+selection checker, and the AI-runner settings panel — and they run on this machine, because that
+is where the accessibility bus is. A phone can reach the API; it cannot run the card.
+
+Installing the engine on Windows or macOS is not built yet: `make bundle-windows-amd64` and
+`make bundle-darwin-arm64` cross-compile the server, but they need that platform's harper pair
+(`HARPER_DIR=...`).
 
 What that costs: the text you paste travels unencrypted over the network, there is no
 authentication, and every endpoint on the engine is reachable — including `/v2/rewrite`,
 which spends CPU on ollama. Checks are serialized, so a busy client slows everyone's. Put
-`--host 127.0.0.1` back in `deployments/systemd/grammar-server.service` (and `--bind
-127.0.0.1` for the UI) and `make install` to go back to loopback-only.
+`--host 127.0.0.1` back in `deployments/systemd/grammar-server.service` and `make install` to go
+back to loopback-only.
 
-## AppImage
+## AppImage (retired)
 
-`make appimage` builds `dist/grammar-server-<version>-x86_64.AppImage` — the engine, the
-harper pair and the UI in one executable file. It is a launcher first: when a
-grammar-server and a UI already answer (the installed user units do, on 8875 and 8899) it
-points the browser at them and exits, so every client shares one engine and one UI and
-nothing is left running. Only what is missing is started from inside the bundle, and then
-the process stays in the foreground until you quit it with Ctrl+C.
-
-`python3` is the one thing not in the bundle, used only to serve the UI's static files;
-without it the bundle says so and you can open `ui/index.html` from the extracted tree.
-`GRAMMAR_PORT` (8875), `GRAMMAR_UI_PORT` (8899) and `GRAMMAR_NO_OPEN=1` override the
-defaults. The payload is a read-only squashfs, so nothing the app does writes into it.
+There was an AppImage that started the engine, served the old browser UI from inside the bundle
+and opened it. That UI is gone: the clients are a desktop card needing Qt and the accessibility
+bus, which an AppImage of Python scripts cannot provide. The target could only copy files that no
+longer exist, so it is removed rather than left failing — `make package` above is the portable
+artifact today. `git log -- Makefile` has the old target if a portable-engine AppImage is wanted
+back.
 
 ## Portable bundle (any platform)
 

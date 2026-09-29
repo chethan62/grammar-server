@@ -13,7 +13,7 @@ PREFIX ?= $(HOME)/.local
 UNITDIR ?= $(HOME)/.config/systemd/user
 
 # Cross-compile targets
-.PHONY: all bundle clean install uninstall package appimage FORCE
+.PHONY: all bundle clean install uninstall package FORCE
 
 all: $(BIN)
 
@@ -65,11 +65,14 @@ uninstall:
 	-systemctl --user daemon-reload
 
 # Distribution archive: the server, the harper pair it needs beside it (resolveHarper
-# looks in its own directory first), the units, the UI's static files if the sibling
-# checkout is there, and both licences. Extracted anywhere, it runs with nothing
-# installed and nothing on PATH.
+# looks in its own directory first), the unit and both licences. Extracted anywhere, it
+# runs with nothing installed and nothing on PATH.
+#
+# It is server-only, and deliberately so: the clients are a desktop card living in the
+# grammar-ui repo, which needs Qt and the accessibility bus. A tar of Python scripts
+# would not be a working client, and the archive that did try to ship the old browser UI
+# kept copying files that had been deleted — failing the target outright.
 PKG := dist/$(BIN)-$(VERSION)-linux-amd64
-UIDIR ?= ../grammar-ui
 
 package: $(BIN)
 	@set -e; rm -rf $(PKG); mkdir -p $(PKG)/deployments/systemd
@@ -77,40 +80,17 @@ package: $(BIN)
 	cp $(HARPER_DIR)/harper-ls $(HARPER_DIR)/harper-cli $(PKG)/
 	cp deployments/systemd/grammar-server.service $(PKG)/deployments/systemd/
 	curl -fsSL https://raw.githubusercontent.com/Automattic/harper/master/LICENSE -o $(PKG)/LICENSE-harper
-	@if [ -d $(UIDIR) ]; then \
-		mkdir -p $(PKG)/ui/deployments/systemd; \
-		cp $(UIDIR)/index.html $(UIDIR)/app.js $(UIDIR)/style.css $(UIDIR)/README.md $(UIDIR)/LICENSE $(PKG)/ui/; \
-		cp $(UIDIR)/deployments/systemd/grammar-ui.service $(PKG)/ui/deployments/systemd/; \
-		echo "  included the UI from $(UIDIR)"; \
-	else \
-		echo "  no UI at $(UIDIR) — archive is server-only"; \
-	fi
 	tar -czf $(PKG).tar.gz -C dist $(notdir $(PKG))
 	@echo "Package: $(PKG).tar.gz"; ls -lh $(PKG).tar.gz; tar -tzf $(PKG).tar.gz | sed 's/^/  /'
 
-# AppImage: the same pieces as the archive, in one executable file — double-clickable,
-# mounts read-only, and it starts the engine, serves the UI and opens it (see AppRun).
-# Deliberately not part of `package`: it needs appimagetool, which is not a build
-# dependency of the server, and the runtime needs python3 for the UI's static server.
-APPIMAGE ?= appimagetool
-APPDIR := dist/$(BIN).AppDir
-APPOUT := dist/$(BIN)-$(VERSION)-x86_64.AppImage
-
-appimage: $(BIN)
-	@command -v $(APPIMAGE) >/dev/null 2>&1 || { echo "appimagetool not found (Arch: pacman -S appimagetool, or the AppImage release of the tool)"; exit 1; }
-	@test -d $(UIDIR) || { echo "no UI at $(UIDIR): this AppImage is engine + UI, so it needs the sibling checkout"; exit 1; }
-	@set -e; rm -rf $(APPDIR); mkdir -p $(APPDIR)/ui
-	cp $(BIN) $(APPDIR)/
-	cp $(HARPER_DIR)/harper-ls $(HARPER_DIR)/harper-cli $(APPDIR)/
-	cp $(UIDIR)/index.html $(UIDIR)/app.js $(UIDIR)/style.css $(APPDIR)/ui/
-	cp deployments/appimage/AppRun $(APPDIR)/AppRun
-	cp deployments/appimage/grammar-server.desktop $(APPDIR)/
-	cp deployments/appimage/grammar-ui.svg $(APPDIR)/grammar-ui.svg
-	cp deployments/appimage/grammar-ui.svg $(APPDIR)/.DirIcon
-	cp README.md LICENSE $(APPDIR)/
-	chmod +x $(APPDIR)/AppRun
-	ARCH=x86_64 $(APPIMAGE) $(APPDIR) $(APPOUT)
-	@echo "AppImage: $(APPOUT)"; ls -lh $(APPOUT)
+# The AppImage target is retired, not broken.
+#
+# It built a double-clickable file whose whole job was to start the engine, serve the old
+# browser UI from the bundle and open it. That UI is gone — the clients are a desktop card
+# that needs Qt and the accessibility bus, which an AppImage of Python scripts cannot
+# provide — so the target could only copy files that no longer exist and fail. `package`
+# above is the portable artifact; `git log -- Makefile` has the old target if a
+# portable-engine AppImage is ever wanted again.
 
 clean:
 	rm -rf dist/

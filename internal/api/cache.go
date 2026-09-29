@@ -17,10 +17,10 @@ const defaultCacheEntries = 512
 // lintCache remembers the engine's verdict on one chunk of text.
 //
 // It exists because a client re-sends almost the same document on every pause:
-// the typing watcher sends a caret window that overlaps its predecessor, and the
-// browser UI sends the whole textarea 400 ms after each keystroke. Without this,
-// every one of those re-checks every chunk, so a 50 KB document costs 8.8 s
-// again and again for text that has not changed.
+// the typing watcher sends a caret window that overlaps its predecessor, and a
+// client that re-checks a whole document after each keystroke does the same. Without
+// this, every one of those re-checks rechecks every chunk, so a 50 KB document costs
+// 8.8 s again and again for text that has not changed.
 //
 // The key is the chunk AND the configuration it was checked under, because the
 // rules and the dialect are engine state rather than per-request filters: text

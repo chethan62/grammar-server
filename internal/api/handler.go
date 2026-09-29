@@ -258,7 +258,11 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 			"POST /v2/stats", "GET /v2/languages", "GET /status",
 			"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
 		},
-		"ui": "https://github.com/chethan62/grammar-ui — static; serve it and set its API base to this origin",
+		// There is no page to open. The clients live in the grammar-ui repo and are desktop
+		// programs — a card at the caret, a selection checker on a shortcut, an AI-runner settings
+		// panel — so "static; serve it" was advice that had been wrong since the browser UI was
+		// deleted, and a client following it would have found nothing on that port.
+		"ui": "https://github.com/chethan62/grammar-ui — desktop clients (Qt), not a page: a suggestion card at the caret, a selection checker, and the AI-runner settings panel. This API is reachable from anywhere on the network; changing the backend is not.",
 	})
 }
 

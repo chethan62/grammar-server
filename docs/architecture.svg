@@ -73,7 +73,7 @@
   <text x="1244.8" y="574.2" fill="#e8e9ee" text-anchor="middle">Clients over the same API</text>
   <path d="M1112.8 588.8 H1376.8 a8 8 0 0 1 8 8 V624.8 a8 8 0 0 1 -8 8 H1112.8 a8 8 0 0 1 -8 -8 V596.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="1244.8" y="615" fill="#a5d8f5" text-anchor="middle">static UI :8899 · lookup Ctrl+Alt+C</text>
+  <text x="1244.8" y="615" fill="#a5d8f5" text-anchor="middle">desktop card at the caret · lookup Ctrl+Alt+C · AI runner</text>
   </g>
   <path d="M48 478.8 H384 a8 8 0 0 1 8 8 V705.8 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V486.8 a8 8 0 0 1 8 -8 Z" fill="#1c3020" stroke="#7fce74"/>
   <text x="216" y="523.2" fill="#e8e9ee" text-anchor="middle">AI backend — one of six</text>

@@ -36,7 +36,7 @@ node card.sub "GTK3, placed at the caret" (size: small, color: #ffb0cd)  below c
 node engine "grammar-server"  below watch  gap: normal  style: engine
 node engine.sub "Go :8875 · LanguageTool-compatible" (size: small, color: #9ce8dd)  below engine text  style: sublabel
 node clients "Clients over the same API"  right of engine  gap: normal  style: clients
-node clients.sub "static UI :8899 · lookup Ctrl+Alt+C" (size: small, color: #a5d8f5)  below clients text  style: sublabel
+node clients.sub "desktop card at the caret · lookup Ctrl+Alt+C · AI runner" (size: small, color: #a5d8f5)  below clients text  style: sublabel
 node ai "AI backend — one of six"  left of engine  gap: normal  style: ollama
 node ai.sub "ollama · llama.cpp · LM Studio · vLLM · OpenRouter · any OpenAI-compatible" (wrap: 44, size: small, color: #b2e5a9)  below ai text  style: sublabel
 node ai.path "chosen with GET/POST /v1/ai, this machine only — never on the check path" (wrap: 44, size: small, color: #b2e5a9)  below ai.sub text  style: sublabel
