@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1286" height="810" viewBox="0 0 1286 810" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
+  <defs>
+    <marker id="rfbeb9a3e-arrow-5c5c7c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c5c7c"/>
+    </marker>
+    <marker id="rfbeb9a3e-arrow-5c5c7c-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c5c7c"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1286" height="810" fill="#111111"/>
+  <path d="M586.4 40 H800.4 a8 8 0 0 1 8 8 V98 a8 8 0 0 1 -8 8 H586.4 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#4f5367"/>
+  <text x="693.4" y="68.4" fill="#d9d9d9" text-anchor="middle">Any app you type in</text>
+  <text x="693.4" y="87.4" fill="#d9d9d9" text-anchor="middle">LibreOffice, Firefox, Qt</text>
+  <g font-size="12px">
+  <text x="592.4" y="199.6" fill="#8b8b8b" text-anchor="start">AT-SPI bus</text>
+  <text x="592.4" y="215.6" fill="#8b8b8b" text-anchor="start">gives the caret and its text</text>
+  </g>
+  <path d="M615.9 243.4 H770.9 a8 8 0 0 1 8 8 V301.4 a8 8 0 0 1 -8 8 H615.9 a8 8 0 0 1 -8 -8 V251.4 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
+  <text x="693.4" y="271.8" fill="#d9d9d9" text-anchor="middle">grammar-watch</text>
+  <text x="693.4" y="290.8" fill="#d9d9d9" text-anchor="middle">systemd user unit</text>
+  <path d="M910.3 243.4 H1132.3 a8 8 0 0 1 8 8 V301.4 a8 8 0 0 1 -8 8 H910.3 a8 8 0 0 1 -8 -8 V251.4 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#4f5367"/>
+  <text x="1021.3" y="271.8" fill="#d9d9d9" text-anchor="middle">Suggestion card</text>
+  <text x="1021.3" y="290.8" fill="#d9d9d9" text-anchor="middle">GTK3, placed at the caret</text>
+  <path d="M544.4 390.8 H842.4 a8 8 0 0 1 8 8 V448.8 a8 8 0 0 1 -8 8 H544.4 a8 8 0 0 1 -8 -8 V398.8 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
+  <text x="693.4" y="419.2" fill="#d9d9d9" text-anchor="middle">grammar-server</text>
+  <text x="693.4" y="438.2" fill="#d9d9d9" text-anchor="middle">Go, :8875, LanguageTool-compatible</text>
+  <g font-size="12px">
+  <text x="639.4" y="493" fill="#8b8b8b" text-anchor="start">chunker</text>
+  <text x="639.4" y="509" fill="#8b8b8b" text-anchor="start">1.5 KB per call</text>
+  </g>
+  <path d="M594.9 536.8 H791.9 a8 8 0 0 1 8 8 V594.8 a8 8 0 0 1 -8 8 H594.9 a8 8 0 0 1 -8 -8 V544.8 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
+  <text x="693.4" y="565.2" fill="#d9d9d9" text-anchor="middle">harper-ls</text>
+  <text x="693.4" y="584.2" fill="#d9d9d9" text-anchor="middle">ONE process, ONE mutex</text>
+  <path d="M582.4 684.2 H804.4 a8 8 0 0 1 8 8 V761.2 a8 8 0 0 1 -8 8 H582.4 a8 8 0 0 1 -8 -8 V692.2 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#d2904e"/>
+  <text x="693.4" y="712.6" fill="#d9d9d9" text-anchor="middle">measured: 200 chars 16 ms</text>
+  <text x="693.4" y="731.6" fill="#d9d9d9" text-anchor="middle">10 KB 1.8 s</text>
+  <text x="693.4" y="750.6" fill="#d9d9d9" text-anchor="middle">200 KB 36 s</text>
+  <path d="M1031.8 390.8 H1203.8 a8 8 0 0 1 8 8 V448.8 a8 8 0 0 1 -8 8 H1031.8 a8 8 0 0 1 -8 -8 V398.8 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#4f5367"/>
+  <text x="1117.8" y="419.2" fill="#d9d9d9" text-anchor="middle">grammar-ui</text>
+  <text x="1117.8" y="438.2" fill="#d9d9d9" text-anchor="middle">static files, :8899</text>
+  <path d="M998.3 480.8 H1237.3 a8 8 0 0 1 8 8 V538.8 a8 8 0 0 1 -8 8 H998.3 a8 8 0 0 1 -8 -8 V488.8 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#4f5367"/>
+  <text x="1117.8" y="509.2" fill="#d9d9d9" text-anchor="middle">grammar-lookup</text>
+  <text x="1117.8" y="528.2" fill="#d9d9d9" text-anchor="middle">Ctrl+Alt+C on the selection</text>
+  <path d="M48 390.8 H380 a8 8 0 0 1 8 8 V448.8 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V398.8 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#4f5367"/>
+  <text x="214" y="419.2" fill="#d9d9d9" text-anchor="middle">ollama</text>
+  <text x="214" y="438.2" fill="#d9d9d9" text-anchor="middle">/v2/rewrite only, never the check path</text>
+  <path d="M 693.4 106 C 693.4 138.56, 693.4 154.84, 693.4 176.2 L 693.4 187.4" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="637.9" y="135.8" width="111" height="19" fill="#111111"/>
+  <text x="693.4" y="150.2" fill="#d9d9d9" text-anchor="middle">text + caret</text>
+  <line x1="693.4" y1="219.4" x2="693.4" y2="243.4" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <path d="M 693.4 309.4 C 693.4 341.96, 693.4 358.24, 693.4 379.6 L 693.4 390.8" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="629.4" y="339.2" width="128" height="19" fill="#111111"/>
+  <text x="693.4" y="353.6" fill="#d9d9d9" text-anchor="middle">POST /v2/check</text>
+  <path d="M 778.9 276.4 C 828.26 276.4, 852.94 276.4, 891.1 276.4 L 902.3 276.4" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="808.7" y="257.4" width="61" height="38" fill="#111111"/>
+  <text x="839.2" y="271.8" fill="#d9d9d9" text-anchor="middle">Accept</text>
+  <text x="839.2" y="290.8" fill="#d9d9d9" text-anchor="middle">Ignore</text>
+  <line x1="693.4" y1="456.8" x2="693.4" y2="480.8" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <line x1="693.4" y1="512.8" x2="693.4" y2="536.8" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <path d="M 1023.8 423.8 C 954.44 423.8, 919.76 423.8, 861.6 423.8 L 850.4 423.8" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="883" y="414.3" width="111" height="19" fill="#111111"/>
+  <text x="938.5" y="428.7" fill="#d9d9d9" text-anchor="middle">the same API</text>
+  <path d="M 1117.8 480.8 L 1117.8 480.8 C 1117.8 474.17, 1064.08 468.8, 997.8 468.8 L 813.4 468.8 C 747.12 468.8, 693.4 468.44, 693.4 468 L 693.4 456.8" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="841.6" y="459.3" width="128" height="19" fill="#111111"/>
+  <text x="905.6" y="473.7" fill="#d9d9d9" text-anchor="middle">POST /v2/check</text>
+  <path d="M 536.4 423.8 C 477.04 423.8, 447.36 423.8, 399.2 423.8 L 388 423.8" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="420.6" y="414.3" width="86" height="19" fill="#111111"/>
+  <text x="463.6" y="428.7" fill="#d9d9d9" text-anchor="middle">on demand</text>
+  <path d="M 693.4 602.8 C 693.4 635.36, 693.4 651.64, 693.4 673 L 693.4 684.2" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#rfbeb9a3e-arrow-5c5c7c)"/>
+  <rect x="595.9" y="632.6" width="195" height="19" fill="#111111"/>
+  <text x="693.4" y="647" fill="#d9d9d9" text-anchor="middle">why chunking is 1.5 KB</text>
+</svg>

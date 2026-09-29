@@ -1,0 +1,33 @@
+// grammar-server — the architecture as measured, 2026-09-29.
+// This file is the source; the picture is rendered from it, so they cannot drift apart:
+//   npx reladraw docs/architecture.reladraw -o docs/architecture.svg
+// Every number on it is a measurement from this box (CPU-only, 85-95C package temp).
+// Dependency direction: engine <- api <- clients. The HTTP API is the only door.
+
+style svc     fill: theme-primary-subtle   border: theme-primary   line: theme-primary
+style client  fill: theme-secondary-subtle border: theme-border    line: theme-border
+style slow    border: #d2904e  line: #d2904e
+style note    text: (color: theme-muted)  shape: none
+
+node apps  "Any app you type in / LibreOffice, Firefox, Qt"  style: client
+node bus   "AT-SPI bus / gives the caret and its text"  below apps  gap: tight  style: note
+node watch "grammar-watch / systemd user unit"  below bus  style: svc
+node card  "Suggestion card / GTK3, placed at the caret"  right of watch  style: client
+node engine "grammar-server / Go, :8875, LanguageTool-compatible"  below watch  style: svc
+node chunk "chunker / 1.5 KB per call"  below engine  gap: tight  style: note
+node harper "harper-ls / ONE process, ONE mutex"  below chunk  gap: tight  style: svc
+node costs "measured: 200 chars 16 ms / 10 KB 1.8 s / 200 KB 36 s"  below harper  gap: tight  style: slow
+node ui    "grammar-ui / static files, :8899"  right of engine  style: client
+node lookup "grammar-lookup / Ctrl+Alt+C on the selection"  below ui  gap: tight  style: client
+node ollama "ollama / /v2/rewrite only, never the check path"  left of engine  style: client
+
+edge apps -> bus  "text + caret"  from: bottom  to: top
+edge bus -> watch
+edge watch -> engine  "POST /v2/check"  from: bottom  to: top
+edge watch -> card    "Accept / Ignore"  from: right   to: left
+edge engine -> chunk
+edge chunk -> harper
+edge ui -> engine     "the same API"     from: left    to: right
+edge lookup -> engine "POST /v2/check"   from: top     to: bottom
+edge engine -> ollama "on demand"        from: left    to: right
+edge harper -> costs  "why chunking is 1.5 KB"  from: bottom  to: top
