@@ -36,5 +36,5 @@ func languageInfo(code string) LangInfo {
 	if !ok {
 		l, _ = lt.Lookup("")
 	}
-	return LangInfo{Name: l.Name, Code: l.Code}
+	return langInfo(l)
 }

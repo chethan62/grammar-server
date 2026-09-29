@@ -85,8 +85,9 @@ func TestLanguagesComeFromTheTable(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	var langs []struct {
-		Name string `json:"name"`
-		Code string `json:"code"`
+		Name     string `json:"name"`
+		Code     string `json:"code"`
+		LongCode string `json:"longCode"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&langs); err != nil {
 		t.Fatal(err)
@@ -96,6 +97,13 @@ func TestLanguagesComeFromTheTable(t *testing.T) {
 		seen[l.Code] = true
 		if l.Name == "" || l.Name == l.Code {
 			t.Errorf("entry %+v: name is empty or is just the code", l)
+		}
+		// longCode is not decoration: language_tool_python's _get_languages()
+		// adds e.get("code") and e.get("longCode") for every entry, then
+		// lowercases each member — a missing key adds None and the client dies
+		// before its first check.
+		if l.LongCode == "" {
+			t.Errorf("entry %+v: longCode is missing (LanguageTool clients read it)", l)
 		}
 		// A code we advertise must survive a real check.
 		body := `{"text":"He go to the store.","language":"` + l.Code + `"}`

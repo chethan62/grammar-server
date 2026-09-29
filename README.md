@@ -39,7 +39,9 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
  "level": "default", "motherTongue": "de-DE", "preferredVariants": ["en-US"]}
 ```
 
-- `offset`/`length` are **UTF-16 code units** (matches LanguageTool/LTeX).
+- `offset`/`length` are **UTF-16 code units** (matches LanguageTool/LTeX, whose
+  implementation is Java), so a JS client slices `text` with them directly and an
+  emoji counts as two. Verified against text with an emoji before the error.
 - `language` selects the harper dialect (`en-US` → American, `en-GB` → British, …).
   A language this server cannot check is refused with LanguageTool's own `400`.
 - `enabledRules`/`disabledRules` take LanguageTool rule ids (`MORFOLOGIK_RULE_EN_US`)
@@ -63,7 +65,8 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
 Other endpoints: `GET /` (an index of the endpoints below — this server is
 API-only now; the UI is a separate static page, [grammar-ui](https://github.com/chethan62/grammar-ui),
 which you point at this origin), `GET /v2/stats` (delivery metrics),
-`GET /v2/languages`, `POST /v2/rewrite` (optional, needs a local Ollama).
+`GET /v2/languages` (entries carry `name`, `code` and `longCode` — clients read the
+last one), `POST /v2/rewrite` (optional, needs a local Ollama).
 
 ## Architecture
 
@@ -183,6 +186,20 @@ harper-ls is looked up on `PATH`, then beside the binary, then `--harper /path/t
 LTeX and the LT extensions send the correctness tier only, so they will not show
 the style hints — those need `level: "picky"` (or `enabledCategories: ["STYLE"]`) in
 the request, which is what grammar-ui and the curl examples below do.
+
+Verified against a real client library, not only against curl:
+
+```bash
+uv run --with language_tool_python python examples/lt-client-smoke.py
+    ok  typo is reported: ['teh', 'wrote']
+    ok  correct() applies: She goes to the office.
+    ok  picky reaches the style tier: ['PREFERRED_TERM', 'WORDINESS']
+    ok  disabledRules is honoured: []
+    ok  enabledOnly is honoured: ['MORFOLOGIK_RULE_EN_US']
+```
+
+It exits non-zero if the server is not there or any of that stops holding — curl only
+proves the shapes you thought of, a client proves the ones you did not.
 
 ## Limitations
 

@@ -122,6 +122,16 @@ type Software struct {
 type LangInfo struct {
 	Name string `json:"name"`
 	Code string `json:"code"`
+	// LongCode is the same tag in LanguageTool's long spelling. Clients read it:
+	// language_tool_python builds its language set from code and longCode, and a
+	// missing key makes it add None and crash before it can even check anything.
+	LongCode string `json:"longCode"`
+}
+
+// langInfo is the one place a table entry becomes a response entry, so /v2/languages
+// and a check's "language" object can never disagree about a code.
+func langInfo(l lt.Language) LangInfo {
+	return LangInfo{Name: l.Name, Code: l.Code, LongCode: l.Code}
 }
 
 type Match struct {
@@ -211,7 +221,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleLanguages(w http.ResponseWriter, _ *http.Request) {
 	langs := make([]LangInfo, 0, len(lt.Languages))
 	for _, l := range lt.Languages {
-		langs = append(langs, LangInfo{Name: l.Name, Code: l.Code})
+		langs = append(langs, langInfo(l))
 	}
 	writeJSON(w, 200, langs)
 }
