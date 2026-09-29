@@ -2,7 +2,11 @@
 """Latency probe for the local engine: percentiles per input size, plus machine state.
 
     python3 examples/latency-probe.py                 # default sizes, 20 runs each
-    python3 examples/latency-probe.py --runs 50 --sizes 40,200,1000,10000,200000
+    python3 examples/latency-probe.py --runs 50 --sizes 40,200,1000,10000,100000
+
+Sizes above the server's cap (100 KB) are refused with a 413, by design: the
+engine is linear in characters, so the cap is what keeps every accepted request
+inside the server's write timeout.
     python3 examples/latency-probe.py --concurrent 4  # head-of-line-blocking check
 
 Prints a table and writes JSON for the record. Exits 1 if the engine is unreachable, because a probe
@@ -63,7 +67,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default=os.environ.get("GRAMMAR_API", "http://127.0.0.1:8875"))
     ap.add_argument("--runs", type=int, default=20)
-    ap.add_argument("--sizes", default="40,200,1000,10000,200000")
+    ap.add_argument("--sizes", default="40,200,1000,10000,100000")
     ap.add_argument("--concurrent", type=int, default=1)
     ap.add_argument("--out", default="docs/perf/latest.json")
     args = ap.parse_args()

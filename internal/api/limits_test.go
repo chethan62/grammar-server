@@ -39,7 +39,7 @@ func TestTextTooLargeIsRefused(t *testing.T) {
 		t.Errorf("content-type = %q, want text/plain (LanguageTool's error shape)", ct)
 	}
 	got, _ := io.ReadAll(resp.Body)
-	want := "Error: Your text exceeds the limit of 200000 characters"
+	want := "Error: Your text exceeds the limit of 100000 characters"
 	if !strings.HasPrefix(string(got), want) {
 		t.Errorf("body = %q, want a prefix of %q", got, want)
 	}
@@ -229,12 +229,16 @@ func TestBothSizeGuardsOnEveryTextEndpoint(t *testing.T) {
 		if resp.StatusCode != http.StatusRequestEntityTooLarge {
 			t.Errorf("%s over the cap: status = %d, want 413", tc.path, resp.StatusCode)
 		}
-		if !strings.Contains(string(got), "it's 201000 characters") {
-			t.Errorf("%s over the cap: body = %q, want the actual size named", tc.path, got)
+		// Derived, not spelled out: the number here is maxTextCharsTest+1000, and a
+		// literal goes stale the moment the cap moves (it read 201000 while the
+		// constant said 100_000).
+		wantSize := "it's " + strconv.Itoa(maxTextCharsTest+1000) + " characters"
+		if !strings.Contains(string(got), wantSize) {
+			t.Errorf("%s over the cap: body = %q, want %q", tc.path, got, wantSize)
 		}
 	}
 }
 
 // maxTextCharsTest mirrors api.maxTextChars, which an external test package cannot
 // read. Keep it in step if the cap moves.
-const maxTextCharsTest = 200_000
+const maxTextCharsTest = 100_000

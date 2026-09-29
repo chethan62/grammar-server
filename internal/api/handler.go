@@ -264,12 +264,17 @@ func (s *Server) handleLanguages(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, langs)
 }
 
-// maxTextChars caps a single /v2/check body. Past it the engine's cost is
-// unbounded in practice: a 200 KB document ran >47 s and kept harper-ls at 96%
-// CPU after the client gave up. LanguageTool's own public limit is 20,000
-// characters — we accept 10x that (and chunk above a chunk size later), so
-// anything LT accepts works here too.
-const maxTextChars = 200_000
+// maxTextChars caps a single /v2/check body, set from measurement rather than
+// from a round number. The engine's cost is linear in characters and this box is
+// CPU-only: 1 KB ~130 ms, 10 KB 1.8 s, 50 KB 8.8 s (docs/perf/baseline-*.json),
+// so 100 KB is ~18 s. The cap has to fit inside the server's WriteTimeout with
+// room to spare, or the two numbers contradict each other — a request that needs
+// longer than the timeout is not a big-text promise, it is a dropped connection.
+// That is exactly what a 200 KB body did: 48.4 s of work, then RemoteDisconnected
+// with nothing in the log, because the handler was still working when the write
+// timeout closed the socket. LanguageTool's own public limit is 20,000
+// characters; 100 KB is 5x that, so anything an LT client sends still works.
+const maxTextChars = 100_000
 
 // The two limit messages, shared so the endpoints cannot drift apart. LanguageTool
 // clients show these bodies verbatim.

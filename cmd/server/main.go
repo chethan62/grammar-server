@@ -90,10 +90,13 @@ func main() {
 	}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpSrv := &http.Server{
-		Addr:         addr,
-		Handler:      corsMiddleware(srv.Handler()),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:        addr,
+		Handler:     corsMiddleware(srv.Handler()),
+		ReadTimeout: 15 * time.Second,
+		// Must exceed the worst case maxTextChars allows (100 KB ≈ 18 s here) with
+		// headroom for a hot machine: a body that outlives its own connection is
+		// worse than an honest refusal.
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 	log.Printf("grammar-server listening on %s (harper-ls: %s, dialect: %s)", addr, cfg.Harper, cfg.Dialect)
