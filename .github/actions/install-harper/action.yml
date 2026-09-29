@@ -1,0 +1,22 @@
+name: install harper
+description: Install the pinned harper-ls/harper-cli pair that the rule drift tests validate against.
+
+# One place for the pin on purpose. It has drifted before: the tests compare our rule
+# mappings against this CLI's rule list, so a stale pin means CI silently stops noticing
+# renames upstream, and a pin that disagrees with the pair deployed beside the service
+# means tests pass against an engine nobody runs.
+#
+# Upstream has renamed release assets on existing tags, which fails this step with
+# `curl: (22) … 404` before any Go step runs. To move the pin, read the asset list first:
+#   gh api repos/Automattic/harper/releases/tags/<tag> --jq '.assets[].name'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        base=https://github.com/Automattic/harper/releases/download/v2.11.0
+        curl -fsSL "$base/harper-ls-x86_64-unknown-linux-gnu.tar.gz" | tar xz
+        curl -fsSL "$base/harper-cli-x86_64-unknown-linux-gnu.tar.gz" | tar xz
+        sudo mv harper-ls harper-cli /usr/local/bin/
+        harper-ls --version
+        harper-cli config | python3 -c 'import json,sys; print("harper rules:", len(json.load(sys.stdin)))'
