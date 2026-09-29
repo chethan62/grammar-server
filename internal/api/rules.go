@@ -47,6 +47,68 @@ var harperToLT = map[string]ltRule{
 		IssueType: "style", Category: Category{ID: "REDUNDANCY", Name: "Redundant Phrases"},
 		TypeName: "Hint",
 	},
+	// Harper also names rules after the words they catch — "The", "Cant", "OpenCompounds"
+	// (a lot), "RepeatedWords" — and those names went out as rule.id untouched, which
+	// reads as a word rather than a rule and is invisible to anything filtering or
+	// grouping on LanguageTool ids. Every value below is what api.languagetool.org/v2/check
+	// reports for the same mistake; LanguageTool omits `type` for all of them, so TypeName
+	// stays empty.
+	//
+	// Two entries are a judgement call: LanguageTool has no rule for "Their going" or
+	// "they're house", so both take THERE_THEIR — the same there/their/they're confusion
+	// family, measured from "Look at there house." (CONFUSED_WORDS, "there (their)").
+	"ItsContraction": {
+		ID: "IT_IS", Description: "its vs. it's", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"},
+	},
+	"ModalOf": {
+		ID: "MODAL_OF", Description: "could of (could have)", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"},
+	},
+	"OpenCompounds": {
+		ID: "MORFOLOGIK_RULE_EN_US", Description: "Possible spelling mistake", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"}, TypeName: "UnknownWord",
+	},
+	"The": {
+		ID: "MORFOLOGIK_RULE_EN_US", Description: "Possible spelling mistake", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"}, TypeName: "UnknownWord",
+	},
+	"RepeatedWords": {
+		ID: "ENGLISH_WORD_REPEAT_RULE", Description: "Word repetition (e.g. 'will will')",
+		IssueType: "duplication", Category: Category{ID: "MISC", Name: "Miscellaneous"},
+	},
+	"ToTwoToo": {
+		ID: "TOO_DETERMINER", Description: "too DETERMINER", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"},
+	},
+	"Cant": {
+		ID: "CANT", Description: "cant (can't)", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"},
+	},
+	"WereWhere": {
+		ID: "WERE_WHERE", Description: "were (where)", IssueType: "misspelling",
+		Category: Category{ID: "CONFUSED_WORDS", Name: "Commonly Confused Words"},
+	},
+	"NominalWants": {
+		ID: "WONT_CONTRACTION", Description: "wont (won't)", IssueType: "misspelling",
+		Category: Category{ID: "TYPOS", Name: "Possible Typo"},
+	},
+	"NoFrenchSpaces": {
+		ID: "COMMA_PARENTHESIS_WHITESPACE", Description: "Use of whitespace before comma and before/after parentheses",
+		IssueType: "whitespace", Category: Category{ID: "TYPOGRAPHY", Name: "Typography"},
+	},
+	"ThereToTheir": {
+		ID: "THERE_THEIR", Description: "there (their)", IssueType: "misspelling",
+		Category: Category{ID: "CONFUSED_WORDS", Name: "Commonly Confused Words"},
+	},
+	"TheirToTheyre": {
+		ID: "THERE_THEIR", Description: "there (their)", IssueType: "misspelling",
+		Category: Category{ID: "CONFUSED_WORDS", Name: "Commonly Confused Words"},
+	},
+	"TheyreToTheir": {
+		ID: "THERE_THEIR", Description: "there (their)", IssueType: "misspelling",
+		Category: Category{ID: "CONFUSED_WORDS", Name: "Commonly Confused Words"},
+	},
 	// The three entries below are not harper rules: they come from internal/lt's
 	// deterministic style pass (internal/api/style.go). The passive id and its
 	// STYLE/issueType=style presentation are LanguageTool's own — its picky level
@@ -122,12 +184,23 @@ func ltRuleFor(l engine.Lint) ltRule {
 // not deterministic. internal/api/rules_drift_test.go checks every target is a rule
 // harper still ships.
 var ltToHarper = map[string]string{
-	"MORFOLOGIK_RULE_EN_US":    "SpellCheck",
-	"I_LOWERCASE":              "CapitalizePersonalPronouns",
-	"UPPERCASE_SENTENCE_START": "SentenceCapitalization",
-	"CONSECUTIVE_SPACES":       "Spaces",
-	"HE_VERB_AGR":              "PronounVerbAgreement",
-	"VERY_UNIQUE":              "VeryUnique",
+	"MORFOLOGIK_RULE_EN_US":        "SpellCheck",
+	"I_LOWERCASE":                  "CapitalizePersonalPronouns",
+	"UPPERCASE_SENTENCE_START":     "SentenceCapitalization",
+	"CONSECUTIVE_SPACES":           "Spaces",
+	"HE_VERB_AGR":                  "PronounVerbAgreement",
+	"VERY_UNIQUE":                  "VeryUnique",
+	"IT_IS":                        "ItsContraction",
+	"MODAL_OF":                     "ModalOf",
+	"ENGLISH_WORD_REPEAT_RULE":     "RepeatedWords",
+	"TOO_DETERMINER":               "ToTwoToo",
+	"CANT":                         "Cant",
+	"WERE_WHERE":                   "WereWhere",
+	"WONT_CONTRACTION":             "NominalWants",
+	"COMMA_PARENTHESIS_WHITESPACE": "NoFrenchSpaces",
+	// One name per id: THERE_THEIR covers three harper rules and this is the canonical
+	// one. The other two are on by default, so nothing is unreachable.
+	"THERE_THEIR": "ThereToTheir",
 }
 
 // categoriesWeEmit are the LanguageTool category ids this server can actually
@@ -136,7 +209,7 @@ var ltToHarper = map[string]string{
 // anything, which is a different thing from a clean document.
 var categoriesWeEmit = map[string]bool{
 	"TYPOS": true, "CASING": true, "TYPOGRAPHY": true, "GRAMMAR": true,
-	"REDUNDANCY": true, "STYLE": true,
+	"REDUNDANCY": true, "STYLE": true, "MISC": true, "CONFUSED_WORDS": true,
 }
 
 // styleRuleIDs are ours, not harper's: internal/lt produces them, so they must
