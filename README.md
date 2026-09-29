@@ -50,6 +50,11 @@ query parameters work too; LT clients use all three:
   engine: `enabledRules` can switch on rules harper ships **off**, which filtering
   results could never do. `enabledCategories`/`disabledCategories` take
   `GRAMMAR`/`TYPOS`/`STYLE`/…, and `enabledOnly` runs nothing but what was asked for.
+- `enabledOnly` naming nothing this engine has (an id harper does not ship, a
+  category this server never emits) does not answer "no issues" — `warnings.
+  incompleteResults` comes back `true` instead, the field LanguageTool clients read
+  for "this result is not the whole story". A request that named something real
+  keeps `false`, because there an empty result honestly means clean.
 - `level=picky` adds the style tier (see below). Everything else is the
   correctness tier, so an editor client is never shown hints it did not ask for.
 - `preferredVariants` is LanguageTool's spelling-variant preference, and it is the

@@ -350,6 +350,35 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, resp)
 }
 
+// checkedNothing reports whether the request asked for a check that cannot find
+// anything: enabledOnly naming nothing this engine knows. harper answers that with
+// an empty match list, and a client renders it as a green "no issues" — the same
+// silent wrong answer the language check refuses to give for a code it cannot
+// check. LanguageTool's own field for "this result is not the whole story" is
+// warnings.incompleteResults, so that is what a client is told.
+//
+// An empty result from a request that DID name something known stays false: no
+// matches then means the text is clean, which is the honest answer.
+func (s *Server) checkedNothing(req CheckRequest) bool {
+	if !req.EnabledOnly {
+		return false
+	}
+	for _, name := range harperRuleNames(req.EnabledRules) {
+		if s.eng.KnowsRule(name) {
+			return false
+		}
+	}
+	for _, id := range req.EnabledCategories {
+		if categoriesWeEmit[strings.ToUpper(id)] {
+			return false
+		}
+	}
+	log.Printf("enabledOnly named no rule or category this engine has "+
+		"(enabledRules=%v enabledCategories=%v): not the same as a clean text",
+		req.EnabledRules, req.EnabledCategories)
+	return true
+}
+
 // parseCheckRequest reads the three request shapes LanguageTool clients use:
 // a JSON body, an application/x-www-form-urlencoded POST, and GET query
 // parameters. LanguageTool's own API accepts all three.
@@ -466,7 +495,7 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 		Language:       languageInfo(req.Language),
 		Matches:        matches,
 		SentenceRanges: ranges,
-		Warnings:       Warnings{IncompleteResults: false},
+		Warnings:       Warnings{IncompleteResults: s.checkedNothing(req)},
 	}
 }
 

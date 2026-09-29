@@ -257,6 +257,22 @@ func sameStrings(a, b []string) bool {
 }
 
 // Close terminates the harper-ls subprocess.
+// KnowsRule reports whether harper ships a rule with this name.
+//
+// enabledOnly needs it: a request that names rules the engine does not have leaves
+// the linter map with nothing switched on, and harper then answers an empty result
+// that a client reads as "your text is clean". True is returned before the rule list
+// has been read, because not knowing is not the same as knowing it is absent.
+func (h *Harper) KnowsRule(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.rules == nil {
+		return true
+	}
+	_, ok := h.rules[name]
+	return ok
+}
+
 func (h *Harper) Close() { h.c.Stop() }
 
 // Reconnect restarts the harper-ls subprocess if it has crashed.

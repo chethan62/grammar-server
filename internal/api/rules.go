@@ -130,6 +130,15 @@ var ltToHarper = map[string]string{
 	"VERY_UNIQUE":              "VeryUnique",
 }
 
+// categoriesWeEmit are the LanguageTool category ids this server can actually
+// produce (every Category{ID: …} in this file). A client that names only categories
+// outside this list under enabledOnly is asking for a check that cannot return
+// anything, which is a different thing from a clean document.
+var categoriesWeEmit = map[string]bool{
+	"TYPOS": true, "CASING": true, "TYPOGRAPHY": true, "GRAMMAR": true,
+	"REDUNDANCY": true, "STYLE": true,
+}
+
 // styleRuleIDs are ours, not harper's: internal/lt produces them, so they must
 // never be handed to the engine as linter names.
 var styleRuleIDs = map[string]bool{

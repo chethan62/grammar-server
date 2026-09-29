@@ -299,3 +299,51 @@ func TestMatchesAreOffsetSorted(t *testing.T) {
 		}
 	}
 }
+
+// enabledOnly is a promise to the client: "check nothing but this". When the things
+// it named are not rules this engine has, harper answers zero matches and the client
+// shows a clean document — the one answer this server must never invent (the
+// language check refuses the same way for a code it cannot check). The field
+// LanguageTool clients read for "this is not the whole story" is
+// warnings.incompleteResults.
+func TestEnabledOnlyThatCanMatchNothingSaysSo(t *testing.T) {
+	srv := newTestServer(t)
+	cases := []struct {
+		name, body     string
+		wantIncomplete bool
+	}{
+		{"a rule id nobody has", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledRules":["NoSuchRule"]}`, true},
+		{"a harper rule harper does not ship", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledRules":["NoSuchHarperRule"]}`, true},
+		{"a category we never emit", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledCategories":["NONSENSE"]}`, true},
+		{"a category we do not emit but LT has", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledCategories":["PUNCTUATION"]}`, true},
+		{"a rule that exists", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledRules":["MORFOLOGIK_RULE_EN_US"]}`, false},
+		{"a harper rule by name", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledRules":["SpellCheck"]}`, false},
+		{"a category we emit", `{"text":"teh report","language":"en-US","enabledOnly":true,"enabledCategories":["STYLE"]}`, false},
+		{"enabledRules without enabledOnly", `{"text":"teh report","language":"en-US","enabledRules":["NoSuchRule"]}`, false},
+		{"no filters at all", `{"text":"teh report","language":"en-US"}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := http.Post(srv.URL+"/v2/check", "application/json", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var out struct {
+				Matches  []checkMatch `json:"matches"`
+				Warnings struct {
+					IncompleteResults bool `json:"incompleteResults"`
+				} `json:"warnings"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			if out.Warnings.IncompleteResults != tc.wantIncomplete {
+				t.Errorf("incompleteResults = %v, want %v", out.Warnings.IncompleteResults, tc.wantIncomplete)
+			}
+			if tc.wantIncomplete && len(out.Matches) != 0 {
+				t.Errorf("the check matched %d things while claiming to have checked nothing", len(out.Matches))
+			}
+		})
+	}
+}
