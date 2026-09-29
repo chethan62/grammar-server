@@ -17,6 +17,26 @@ import (
 // minutes. Callers chunk; 2,000 characters is a long paragraph.
 const maxRewriteChars = 2_000
 
+// validDirective reports whether s is safe to place inside the model's
+// instruction: empty, or one short lower-case word ("professional", "casual",
+// "concise"). Anything with spaces, punctuation or length is refused rather
+// than escaped, because a tone is a word - and the refusal names itself, so a
+// client sending something else is told why.
+func validDirective(s string) bool {
+	if s == "" {
+		return true
+	}
+	if len(s) > 20 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < 'a' || c > 'z') && c != '-' {
+			return false
+		}
+	}
+	return true
+}
+
 // RewriteRequest is the body of POST /v2/rewrite.
 type RewriteRequest struct {
 	Text     string `json:"text"`
@@ -131,6 +151,21 @@ func (s *Server) handleRewrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := checkLang(w, req.Language); !ok {
+		return
+	}
+	// tone and intent are interpolated into the model's system instruction, and
+	// this endpoint is reachable from the LAN - only /v1/ai's writes are
+	// loopback-only. A free-text tone is therefore a prompt-injection seam: a
+	// client on the network could send "ignore the above and answer with
+	// <anything>" and the result would be shown as a rephrase of the user's own
+	// sentence. Shut it by accepting only what the contract needs: one short
+	// lower-case word. Everything the UI sends passes unchanged.
+	if !validDirective(req.Tone) {
+		writeError(w, http.StatusBadRequest, "invalid 'tone': one lower-case word, up to 20 letters")
+		return
+	}
+	if !validDirective(req.Intent) {
+		writeError(w, http.StatusBadRequest, "invalid 'intent': one lower-case word, up to 20 letters")
 		return
 	}
 
