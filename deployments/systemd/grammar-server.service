@@ -6,7 +6,14 @@ After=network.target
 Type=simple
 # Binary installed by `make install` (no sudo, no hardcoded source tree). harper-ls
 # is found on PATH or beside the binary.
-ExecStart=%h/.local/bin/grammar-server --port 8875 --dialect American
+#
+# --host 0.0.0.0 means the LAN can reach it too: the point is using the checker from a
+# phone or another machine, and the UI derives its API address from the host it was
+# served from, so that works with no configuration. The trade-off is that the text you
+# paste travels unencrypted over the network and there is no authentication — anything
+# on the LAN can use this engine, including /v2/rewrite (which burns CPU on ollama).
+# Put 127.0.0.1 back if that is not wanted.
+ExecStart=%h/.local/bin/grammar-server --port 8875 --host 0.0.0.0 --dialect American
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

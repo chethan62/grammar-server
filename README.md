@@ -153,6 +153,20 @@ Design notes:
 - **FlatConfig trap** — harper-ls treats linter rules not listed in config as disabled,
   so the full rule map from `harper-cli config` is always sent.
 
+## Using it from another device
+
+The engine and the UI listen on `0.0.0.0`, so anything on the same network can use them:
+open `http://<this-machine>:8899/` from the phone (find the address with `ip -4 addr show
+wlan0`). The UI derives its API address from the host that served it, so it points at this
+machine without any setting being typed — `localhost` in the API field would mean the
+phone itself.
+
+What that costs: the text you paste travels unencrypted over the network, there is no
+authentication, and every endpoint on the engine is reachable — including `/v2/rewrite`,
+which spends CPU on ollama. Checks are serialized, so a busy client slows everyone's. Put
+`--host 127.0.0.1` back in `deployments/systemd/grammar-server.service` (and `--bind
+127.0.0.1` for the UI) and `make install` to go back to loopback-only.
+
 ## AppImage
 
 `make appimage` builds `dist/grammar-server-<version>-x86_64.AppImage` — the engine, the
