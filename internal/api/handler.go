@@ -636,6 +636,8 @@ func u16ToByte(text string, u16off int) int {
 	return len(text)
 }
 
+// extractSentence returns the sentence around a BYTE offset in text. A client's
+// offset is UTF-16 and must be converted first (see u16ToByte).
 func extractSentence(text string, offset int) string {
 	if offset < 0 || offset >= len(text) {
 		return text
@@ -693,7 +695,19 @@ func (s *Server) handleFixSentence(w http.ResponseWriter, r *http.Request) {
 	if textTooLong(w, req.Text, maxTextChars, ltTextGot) {
 		return
 	}
-	sentence := extractSentence(req.Text, req.Offset)
+	// req.Offset is the client's offset, and the API speaks UTF-16 code units
+	// (LanguageTool's convention). Slicing the UTF-8 string with it directly was
+	// the bug: with an emoji before the error the byte index lands two bytes
+	// early, extractSentence returns the PREVIOUS sentence, and the UI swaps that
+	// sentence into the document. Convert once, here, and extractSentence works
+	// in byte offsets like the rest of the package.
+	// req.Offset is the client's offset, and the API speaks UTF-16 code units
+	// (LanguageTool's convention). Slicing the UTF-8 string with it directly was
+	// the bug: with an emoji before the error the byte index lands two bytes
+	// early, extractSentence returns the PREVIOUS sentence, and the UI swaps that
+	// sentence into the document. Convert once, here, and extractSentence works
+	// in byte offsets like the rest of the package.
+	sentence := extractSentence(req.Text, u16ToByte(req.Text, req.Offset))
 
 	// Run harper on just the sentence to get lints.
 	lints, err := s.eng.Check(sentence)

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"grammar-server/internal/api"
 	"grammar-server/internal/engine"
@@ -546,5 +547,66 @@ func TestFixSentenceUnicode(t *testing.T) {
 	}
 	if out.Fixed != "Café the quick brown fox" {
 		t.Errorf("got %q, want %q", out.Fixed, "Café the quick brown fox")
+	}
+}
+
+// The offset tests above could not see this one: they pass offset 0, which means
+// "the whole text". A client sends the UTF-16 offset of the sentence to fix, and
+// reading that number as a byte index lands in the PREVIOUS sentence as soon as a
+// non-ASCII character precedes it — grammar-ui then swaps that sentence into the
+// user's document. The offset here is computed independently (utf16 encoding
+// length), so the test states the contract rather than reusing the server's own
+// conversion.
+func TestFixSentenceOffsetIsUTF16(t *testing.T) {
+	srv := newTestServer(t)
+	cases := []struct {
+		name, text, target, want string
+	}{
+		{
+			name:   "an accented word before the offset",
+			text:   "Café is nice. She go to the office. teh report is late.",
+			target: "She go to the office.",
+			want:   "She goes to the office.",
+		},
+		{
+			name:   "an emoji before the offset (4 bytes, 2 UTF-16 units)",
+			text:   "Hi 😀 there. She go to the office. teh report.",
+			target: "She go to the office.",
+			want:   "She goes to the office.",
+		},
+		{
+			name:   "curly quotes, error in the last sentence",
+			text:   "It’s fine. She go home. The report was teh late.",
+			target: "The report was teh late.",
+			want:   "The report was the late.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			at := strings.Index(tc.text, tc.target)
+			if at < 0 {
+				t.Fatalf("%q does not contain %q", tc.text, tc.target)
+			}
+			u16off := len(utf16.Encode([]rune(tc.text[:at])))
+
+			body, err := json.Marshal(map[string]any{"text": tc.text, "offset": u16off})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.Post(srv.URL+"/v2/fix-sentence", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var out struct {
+				Fixed string `json:"fixed"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+			if out.Fixed != tc.want {
+				t.Errorf("offset %d (UTF-16) fixed the wrong sentence:\n got %q\nwant %q", u16off, out.Fixed, tc.want)
+			}
+		})
 	}
 }
