@@ -121,12 +121,16 @@ Design notes:
   (measured: ten matches = 52-87 ms, two thirds of it codeAction). Sending those requests
   eight-way in parallel measures the same as sequential, so they are not latency-bound and
   the loop stays a loop.
-- **Checks are serialized by design** — one harper-ls behind one mutex. Measured here with
-  65-word documents at `level=picky`: p50 62 ms / p95 102 ms with one request in flight,
-  p95 ≤ 190 ms at 4 in flight, ~20 checks/s aggregate with 96 requests at 32 in flight, and
-  no failures or timeouts. Past ~4 in flight latency queues rather than degrading, so one
-  editor session (LTeX+ keeps about one check per debounce) is well inside it; running more
-  than one engine is the upgrade path if this ever serves several clients at once.
+- **Checks are serialized by design** — one harper-ls behind one mutex, so throughput
+  is ~65 checks/s here whatever the concurrency, and latency is what queues. Measured
+  with a 66-word document at `level=picky` (2 findings): **p50 15 ms / p95 16 ms** with
+  one request in flight, p95 91 ms at 4 in flight, p50 467 ms / p95 527 ms with 96
+  requests at 32 in flight — no failures, no timeouts. Cost tracks findings, not size
+  alone: a 10-match document measured 52-87 ms. Past ~4 in flight latency queues rather
+  than degrading, so one editor session (LTeX+ keeps about one check per debounce) is
+  well inside it; running more than one engine is the upgrade path if this ever serves
+  several clients at once. Re-measure on a cool machine: this one throttles hard when
+  hot (a 66-word check measured 4x slower at 94 °C than at 55 °C).
 - **UTF-16 offsets** — LSP positions are UTF-16 code units; LanguageTool clients (LTeX)
   expect UTF-16 too. `lineCharToU16Offset` converts line/char → flat UTF-16 offset.
 - **FlatConfig trap** — harper-ls treats linter rules not listed in config as disabled,

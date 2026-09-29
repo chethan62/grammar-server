@@ -2,8 +2,11 @@
 # The Go binary is self-contained; harper-ls + harper-cli are platform-specific
 # and must be bundled alongside the grammar-server binary for each target.
 
-VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.4.0)
+# The tag, without the "v": the released binary reports it through /status, and the
+# archive is named after it. "dev" when the build does not go through make.
+VERSION := $(shell git describe --tags --always 2>/dev/null | sed 's/^v//' || echo dev)
 GO := go
+LDFLAGS := -s -w -X grammar-server/internal/api.Version=$(VERSION)
 BIN := grammar-server
 HARPER_DIR := /usr/bin
 PREFIX ?= $(HOME)/.local
@@ -19,7 +22,7 @@ all: $(BIN)
 GOFILES := $(shell find cmd internal -name '*.go')
 
 $(BIN): $(GOFILES) go.mod
-	$(GO) build -ldflags="-s -w" -o $@ ./cmd/server
+	$(GO) build -ldflags="$(LDFLAGS)" -o $@ ./cmd/server
 
 # Bundle: compile for a target and create a portable zip/tar.gz
 # Usage: make bundle-linux-amd64 HARPER_DIR=~/harper-linux/
@@ -28,7 +31,7 @@ bundle-%: GOOS = $(word 1,$(OS_ARCH))
 bundle-%: GOARCH = $(word 2,$(OS_ARCH))
 bundle-%:
 	@mkdir -p dist/$*
-	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build -ldflags="-s -w" -o dist/$*/$(BIN) ./cmd/server
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build -ldflags="$(LDFLAGS)" -o dist/$*/$(BIN) ./cmd/server
 	@if [ -f $(HARPER_DIR)/harper-ls ]; then cp $(HARPER_DIR)/harper-ls dist/$*/; fi
 	@if [ -f $(HARPER_DIR)/harper-cli ]; then cp $(HARPER_DIR)/harper-cli dist/$*/; fi
 	@cp deployments/systemd/grammar-server.service dist/$*/ 2>/dev/null || true
@@ -38,7 +41,7 @@ bundle-%:
 # Quick bundle for current platform
 bundle-local:
 	@mkdir -p dist/local
-	$(GO) build -ldflags="-s -w" -o dist/local/$(BIN) ./cmd/server
+	$(GO) build -ldflags="$(LDFLAGS)" -o dist/local/$(BIN) ./cmd/server
 	cp $(HARPER_DIR)/harper-ls $(HARPER_DIR)/harper-cli dist/local/ 2>/dev/null || true
 	@echo "Local bundle: dist/local/"
 	@ls -lh dist/local/

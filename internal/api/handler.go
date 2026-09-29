@@ -182,8 +182,13 @@ type Server struct {
 	rw *rewrite.Client
 }
 
+// Version is what /status and every response report. It is set at build time from
+// the git tag (`make`, see the Makefile) so a released binary cannot claim a release
+// it was not built from; "dev" means a build that did not go through make.
+var Version = "dev"
+
 func NewServer(eng *engine.Harper) *Server {
-	return &Server{eng: eng, version: "0.4.0"}
+	return &Server{eng: eng, version: Version}
 }
 
 func (s *Server) Handler() http.Handler {
