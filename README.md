@@ -155,11 +155,25 @@ Design notes:
 
 ## Using it from another device
 
-The engine and the UI listen on `0.0.0.0`, so anything on the same network can use them:
-open `http://<this-machine>:8899/` from the phone (find the address with `ip -4 addr show
-wlan0`). The UI derives its API address from the host that served it, so it points at this
-machine without any setting being typed — `localhost` in the API field would mean the
-phone itself.
+Both services listen dual-stack (`*:8875`, `*:8899`) and avahi advertises this machine over
+mDNS, so the address to type depends only on what the client can resolve:
+
+| client | type |
+|---|---|
+| this machine | `http://localhost:8899/` |
+| Linux, Windows 10+, macOS on the network | `http://cachyos.local:8899/` — stable, survives a new DHCP lease |
+| Android, older Windows | `http://192.168.29.123:8899/` — Android does not resolve `.local`; check the address with `ip -4 addr show wlan0` |
+
+The UI derives its API address from the host that served it, so whichever of those you
+type, it points at this machine with nothing to configure — typing `localhost` into the
+API field is the one way to break it from another device. Dual-stack matters for the name:
+mDNS publishes an AAAA record, and an IPv6-preferring client that finds only an IPv4
+listener gets "connection refused" from a name that works by address.
+
+Installing the checker on Windows or macOS is not built yet: `make bundle-windows-amd64` and
+`make bundle-darwin-arm64` cross-compile the server, but they need that platform's harper
+pair (`HARPER_DIR=...`), and the UI needs a static server there — `python -m http.server`
+if Python is installed, since the core deliberately does not serve the UI.
 
 What that costs: the text you paste travels unencrypted over the network, there is no
 authentication, and every endpoint on the engine is reachable — including `/v2/rewrite`,
