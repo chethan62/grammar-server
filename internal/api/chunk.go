@@ -14,10 +14,28 @@ import (
 // up, which the 15 s LSP deadline turns into a 500 — chunking is what keeps the
 // 200k character cap an honest promise.
 //
-// ponytail: sequential chunks of 12 KB. Measured ~4 ms per KB, so one chunk is
-// ~50 ms and a full 200k document ~1 s. If that becomes the bottleneck, pipeline
-// the chunks through the engine rather than raising this number.
-const chunkBytes = 12_000
+// Measured on this box (CPU-only, 85-95C package temp, so roughly 2x pessimistic):
+//
+//	40 chars      11.7 ms p50
+//	200 chars     15.6 ms p50
+//	1 000 chars  113.0 ms p50
+//	10 000 chars  10 037 ms  <- the diagnostics deadline, not harper's real cost
+//
+// The 10 KB figure is the deadline, and that is the bug this constant was set
+// wrong for: at 12 KB per chunk a 10 KB text went to the engine as ONE call,
+// missed the 10 s deadline, and came back with partial results — while a 200 KB
+// document became 17 such calls, so one request held the engine for ~170 s and
+// starved everything else, /status included (measured: GET /status 6.5 s, and
+// /v2/check at 10.13s, 9.98s, 10.04s).
+//
+// 1 500 bytes keeps one call at roughly 150-200 ms, far under the deadline, so
+// no chunk can time out at all. The total for a document is then character-bound
+// and linear, about 0.1 ms per character: 10 KB ~1 s, 200 KB ~20 s, and the
+// interactive path (~200 characters) ~16 ms.
+//
+// ponytail: sequential chunks. Pipeline them only if a character-bound 20 s
+// worst case ever matters; the typing watcher never sends more than ~500 bytes.
+const chunkBytes = 1_500
 
 // checkChunked lints text of any length by splitting it at sentence boundaries
 // and shifting each chunk's offsets back to the whole document.
