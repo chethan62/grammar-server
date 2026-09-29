@@ -347,3 +347,106 @@ func TestEnabledOnlyThatCanMatchNothingSaysSo(t *testing.T) {
 		})
 	}
 }
+
+// LanguageTool always sends these keys and clients read them without checking:
+// language_tool_python crashed on a missing longCode before it could check anything.
+// Asserted on raw JSON keys rather than struct fields, because a struct field with
+// omitempty is exactly how shortMessage went missing on the rules that have no short
+// form — the key was there in the code and absent from every response that mattered.
+func TestResponseCarriesEveryKeyLanguageToolSends(t *testing.T) {
+	srv := newTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/v2/check", "application/json",
+		strings.NewReader(`{"text":"I cant do it. teh report is late.","language":"en-US","level":"picky"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var top map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&top); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"software", "language", "matches", "sentenceRanges",
+		"extendedSentenceRanges", "warnings"} {
+		if _, ok := top[key]; !ok {
+			t.Errorf("response has no %q key: every LanguageTool response has it, and a client "+
+				"reading it unconditionally does not survive its absence", key)
+		}
+	}
+
+	var matches []map[string]json.RawMessage
+	if err := json.Unmarshal(top["matches"], &matches); err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) == 0 {
+		t.Fatal("no matches — this test is not looking at a real response")
+	}
+	emptyShort := 0
+	for i, m := range matches {
+		for _, key := range []string{"offset", "length", "message", "shortMessage",
+			"replacements", "rule", "context", "sentence"} {
+			if _, ok := m[key]; !ok {
+				t.Errorf("match %d is missing %q (LanguageTool always sends it)", i, key)
+			}
+		}
+		var short string
+		_ = json.Unmarshal(m["shortMessage"], &short)
+		if short == "" {
+			emptyShort++
+		}
+		var rule, ctx map[string]json.RawMessage
+		_ = json.Unmarshal(m["rule"], &rule)
+		_ = json.Unmarshal(m["context"], &ctx)
+		for _, key := range []string{"id", "description", "issueType", "category"} {
+			if _, ok := rule[key]; !ok {
+				t.Errorf("match %d: rule has no %q", i, key)
+			}
+		}
+		for _, key := range []string{"text", "offset", "length"} {
+			if _, ok := ctx[key]; !ok {
+				t.Errorf("match %d: context has no %q", i, key)
+			}
+		}
+	}
+	// At least one of these rules has no short form, which is the case omitempty used
+	// to swallow. If the corpus ever stops producing one, pin a different sentence
+	// rather than deleting the assertion.
+	if emptyShort == 0 {
+		t.Errorf("every match had a non-empty shortMessage: this text should include a rule "+
+			"with no short form, so the empty case is no longer being exercised (%d matches)", len(matches))
+	}
+
+	// sentenceRanges and extendedSentenceRanges must agree — a client cross-checks them.
+	var sr [][]int64
+	if err := json.Unmarshal(top["sentenceRanges"], &sr); err != nil {
+		t.Fatal(err)
+	}
+	var ex []struct {
+		From, To          int64
+		DetectedLanguages []struct {
+			Language string
+			Rate     float64
+		}
+	}
+	if err := json.Unmarshal(top["extendedSentenceRanges"], &ex); err != nil {
+		t.Fatal(err)
+	}
+	if len(ex) != len(sr) {
+		t.Fatalf("extendedSentenceRanges has %d entries, sentenceRanges %d", len(ex), len(sr))
+	}
+	for i := range ex {
+		if len(sr[i]) != 2 || sr[i][0] != ex[i].From || sr[i][1] != ex[i].To {
+			t.Errorf("entry %d: sentenceRanges %v disagrees with extendedSentenceRanges %d-%d",
+				i, sr[i], ex[i].From, ex[i].To)
+		}
+		if ex[i].From >= ex[i].To {
+			t.Errorf("entry %d: from %d is not before to %d", i, ex[i].From, ex[i].To)
+		}
+		if len(ex[i].DetectedLanguages) != 1 ||
+			ex[i].DetectedLanguages[0].Language != "en" || ex[i].DetectedLanguages[0].Rate != 1.0 {
+			t.Errorf("entry %d: detectedLanguages %+v, want one entry for en at rate 1.0",
+				i, ex[i].DetectedLanguages)
+		}
+	}
+}

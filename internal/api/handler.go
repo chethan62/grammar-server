@@ -103,7 +103,26 @@ type CheckResponse struct {
 	Language       LangInfo  `json:"language"`
 	Matches        []Match   `json:"matches"`
 	SentenceRanges [][]int64 `json:"sentenceRanges"`
-	Warnings       Warnings  `json:"warnings"`
+	// ExtendedSentenceRanges is present in every LanguageTool response and carries
+	// from/to plus per-sentence detectedLanguages. LanguageTool fills those by running
+	// language detection; this server checks exactly one language and does not guess,
+	// so each entry names the language the sentence was checked as. The field is here
+	// because a client that maps over it cannot survive its absence — the same reason
+	// longCode exists in LangInfo.
+	ExtendedSentenceRanges []ExtendedSentenceRange `json:"extendedSentenceRanges"`
+	Warnings               Warnings                `json:"warnings"`
+}
+
+// ExtendedSentenceRange is one entry of LanguageTool's extendedSentenceRanges.
+type ExtendedSentenceRange struct {
+	From              int64              `json:"from"`
+	To                int64              `json:"to"`
+	DetectedLanguages []DetectedLanguage `json:"detectedLanguages"`
+}
+
+type DetectedLanguage struct {
+	Language string  `json:"language"`
+	Rate     float64 `json:"rate"`
 }
 
 // Warnings is part of the LanguageTool response shape: clients read
@@ -138,7 +157,7 @@ func langInfo(l lt.Language) LangInfo {
 
 type Match struct {
 	Message      string        `json:"message"`
-	ShortMessage string        `json:"shortMessage,omitempty"`
+	ShortMessage string        `json:"shortMessage"` // always sent ("" when unmapped), as LanguageTool does
 	Replacements []Replacement `json:"replacements"`
 	Rule         RuleInfo      `json:"rule"`
 	Type         TypeInfo      `json:"type"`
@@ -499,10 +518,11 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			BuildDate:  time.Now().UTC().Format(time.RFC3339),
 			APIVersion: 2, Status: "OK",
 		},
-		Language:       languageInfo(req.Language),
-		Matches:        matches,
-		SentenceRanges: ranges,
-		Warnings:       Warnings{IncompleteResults: s.checkedNothing(req)},
+		Language:               languageInfo(req.Language),
+		Matches:                matches,
+		SentenceRanges:         ranges,
+		ExtendedSentenceRanges: extendedRanges(ranges, req.Language),
+		Warnings:               Warnings{IncompleteResults: s.checkedNothing(req)},
 	}
 }
 
@@ -580,6 +600,27 @@ func writeError(w http.ResponseWriter, code int, format string, args ...any) {
 }
 
 // --- Sentence helpers -------------------------------------------------
+
+// extendedRanges wraps the same ranges LanguageTool returns in sentenceRanges, with
+// the language every sentence was checked as. Rate is 1.0: one language was used for
+// the whole request and there is nothing to be uncertain about.
+func extendedRanges(ranges [][]int64, language string) []ExtendedSentenceRange {
+	base := language
+	if i := strings.IndexByte(base, '-'); i > 0 {
+		base = base[:i]
+	}
+	out := make([]ExtendedSentenceRange, 0, len(ranges))
+	for _, r := range ranges {
+		if len(r) != 2 {
+			continue
+		}
+		out = append(out, ExtendedSentenceRange{
+			From: r[0], To: r[1],
+			DetectedLanguages: []DetectedLanguage{{Language: base, Rate: 1.0}},
+		})
+	}
+	return out
+}
 
 // sentenceRanges returns UTF-16 code unit offset pairs [start, end) for the
 // sentences in text, from the one sentence definition this codebase has
