@@ -13,15 +13,18 @@ PREFIX ?= $(HOME)/.local
 UNITDIR ?= $(HOME)/.config/systemd/user
 
 # Cross-compile targets
-.PHONY: all bundle clean install uninstall package
+.PHONY: all bundle clean install uninstall package FORCE
 
 all: $(BIN)
 
-# Depend on the sources: without this, make saw a stale ./grammar-server, skipped the
-# build, and `make install` happily installed the previous release's binary.
-GOFILES := $(shell find cmd internal -name '*.go')
+# Always rebuild. This was a source dependency once, which is the same trap twice:
+# a stale ./grammar-server could be installed under a new name, and now the version
+# itself is a build input — tagging a commit changes no .go file, so the release
+# archive was built around the previous release's binary. Go's build cache makes an
+# unchanged rebuild cost about a second, which is cheaper than a wrong artifact.
+FORCE:
 
-$(BIN): $(GOFILES) go.mod
+$(BIN): FORCE
 	$(GO) build -ldflags="$(LDFLAGS)" -o $@ ./cmd/server
 
 # Bundle: compile for a target and create a portable zip/tar.gz

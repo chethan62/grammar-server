@@ -160,7 +160,7 @@ turns the current checkout into the archive that ships on the
 [releases page](https://github.com/chethan62/grammar-server/releases):
 
 ```
-grammar-server-v0.4.0-linux-amd64.tar.gz   (30 MB)
+grammar-server-0.4.1-linux-amd64.tar.gz   (30 MB)
 ├── grammar-server  harper-ls  harper-cli  ← no install, no PATH, no network
 ├── deployments/systemd/grammar-server.service
 ├── ui/                                     ← the UI's three files + its unit
