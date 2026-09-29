@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # So a run can be asked for by hand. Measured in the sibling repo: a push does not always
+  # create one, and without this trigger there is no way to ask for the verdict it should have
+  # produced. Cheap insurance on the one path that decides whether a change is good.
+  workflow_dispatch:
 
 jobs:
   test:
