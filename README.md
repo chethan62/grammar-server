@@ -31,7 +31,8 @@ curl -s -X POST http://localhost:8875/v2/check -H 'Content-Type: application/jso
 
 ## API
 
-`POST /v2/check` — LanguageTool request/response:
+`POST /v2/check` — LanguageTool request/response. Form-encoded POSTs and `GET` with
+query parameters work too; LT clients use all three:
 
 ```json
 {"text": "…", "language": "en-US", "enabledRules": [], "disabledRules": [],
