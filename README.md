@@ -153,6 +153,20 @@ Design notes:
 - **FlatConfig trap** — harper-ls treats linter rules not listed in config as disabled,
   so the full rule map from `harper-cli config` is always sent.
 
+## AppImage
+
+`make appimage` builds `dist/grammar-server-<version>-x86_64.AppImage` — the engine, the
+harper pair and the UI in one executable file. It is a launcher first: when a
+grammar-server and a UI already answer (the installed user units do, on 8875 and 8899) it
+points the browser at them and exits, so every client shares one engine and one UI and
+nothing is left running. Only what is missing is started from inside the bundle, and then
+the process stays in the foreground until you quit it with Ctrl+C.
+
+`python3` is the one thing not in the bundle, used only to serve the UI's static files;
+without it the bundle says so and you can open `ui/index.html` from the extracted tree.
+`GRAMMAR_PORT` (8875), `GRAMMAR_UI_PORT` (8899) and `GRAMMAR_NO_OPEN=1` override the
+defaults. The payload is a read-only squashfs, so nothing the app does writes into it.
+
 ## Portable bundle (any platform)
 
 The `grammar-server` binary finds harper-ls/cli in its own directory first,

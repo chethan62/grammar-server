@@ -13,7 +13,7 @@ PREFIX ?= $(HOME)/.local
 UNITDIR ?= $(HOME)/.config/systemd/user
 
 # Cross-compile targets
-.PHONY: all bundle clean install uninstall package FORCE
+.PHONY: all bundle clean install uninstall package appimage FORCE
 
 all: $(BIN)
 
@@ -87,6 +87,30 @@ package: $(BIN)
 	fi
 	tar -czf $(PKG).tar.gz -C dist $(notdir $(PKG))
 	@echo "Package: $(PKG).tar.gz"; ls -lh $(PKG).tar.gz; tar -tzf $(PKG).tar.gz | sed 's/^/  /'
+
+# AppImage: the same pieces as the archive, in one executable file — double-clickable,
+# mounts read-only, and it starts the engine, serves the UI and opens it (see AppRun).
+# Deliberately not part of `package`: it needs appimagetool, which is not a build
+# dependency of the server, and the runtime needs python3 for the UI's static server.
+APPIMAGE ?= appimagetool
+APPDIR := dist/$(BIN).AppDir
+APPOUT := dist/$(BIN)-$(VERSION)-x86_64.AppImage
+
+appimage: $(BIN)
+	@command -v $(APPIMAGE) >/dev/null 2>&1 || { echo "appimagetool not found (Arch: pacman -S appimagetool, or the AppImage release of the tool)"; exit 1; }
+	@test -d $(UIDIR) || { echo "no UI at $(UIDIR): this AppImage is engine + UI, so it needs the sibling checkout"; exit 1; }
+	@set -e; rm -rf $(APPDIR); mkdir -p $(APPDIR)/ui
+	cp $(BIN) $(APPDIR)/
+	cp $(HARPER_DIR)/harper-ls $(HARPER_DIR)/harper-cli $(APPDIR)/
+	cp $(UIDIR)/index.html $(UIDIR)/app.js $(UIDIR)/style.css $(APPDIR)/ui/
+	cp deployments/appimage/AppRun $(APPDIR)/AppRun
+	cp deployments/appimage/grammar-server.desktop $(APPDIR)/
+	cp deployments/appimage/grammar-ui.svg $(APPDIR)/grammar-ui.svg
+	cp deployments/appimage/grammar-ui.svg $(APPDIR)/.DirIcon
+	cp README.md LICENSE $(APPDIR)/
+	chmod +x $(APPDIR)/AppRun
+	ARCH=x86_64 $(APPIMAGE) $(APPDIR) $(APPOUT)
+	@echo "AppImage: $(APPOUT)"; ls -lh $(APPOUT)
 
 clean:
 	rm -rf dist/
