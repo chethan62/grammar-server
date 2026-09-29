@@ -1,129 +1,135 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1316" height="989" viewBox="0 0 1316 989" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
+<svg xmlns="http://www.w3.org/2000/svg" width="1439" height="989" viewBox="0 0 1439 989" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
   <defs>
-    <marker id="r01ba92c0-arrow-6f9bff" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-6f9bff" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#6f9bff"/>
     </marker>
-    <marker id="r01ba92c0-arrow-6f9bff-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-6f9bff-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#6f9bff"/>
     </marker>
-    <marker id="r01ba92c0-arrow-a98cff" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-a98cff" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#a98cff"/>
     </marker>
-    <marker id="r01ba92c0-arrow-a98cff-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-a98cff-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#a98cff"/>
     </marker>
-    <marker id="r01ba92c0-arrow-4fd8c4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-4fd8c4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#4fd8c4"/>
     </marker>
-    <marker id="r01ba92c0-arrow-4fd8c4-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-4fd8c4-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#4fd8c4"/>
     </marker>
-    <marker id="r01ba92c0-arrow-5fb8e8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-5fb8e8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#5fb8e8"/>
     </marker>
-    <marker id="r01ba92c0-arrow-5fb8e8-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-5fb8e8-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#5fb8e8"/>
     </marker>
-    <marker id="r01ba92c0-arrow-7fce74" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-7fce74" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#7fce74"/>
     </marker>
-    <marker id="r01ba92c0-arrow-7fce74-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-7fce74-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#7fce74"/>
     </marker>
-    <marker id="r01ba92c0-arrow-ffc04d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-ffc04d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffc04d"/>
     </marker>
-    <marker id="r01ba92c0-arrow-ffc04d-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r42f2a967-arrow-ffc04d-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffc04d"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="1316" height="989" fill="#111111"/>
+  <rect x="0" y="0" width="1439" height="989" fill="#111111"/>
   <g font-size="17px">
-  <text x="586.4" y="57.45" fill="#d9d9d9" text-anchor="start">grammar-server</text>
+  <text x="709.4" y="57.45" fill="#d9d9d9" text-anchor="start">grammar-server</text>
   </g>
-  <path d="M503.9 87 H811.9 a8 8 0 0 1 8 8 V123 a8 8 0 0 1 -8 8 H503.9 a8 8 0 0 1 -8 -8 V95 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M626.9 87 H934.9 a8 8 0 0 1 8 8 V123 a8 8 0 0 1 -8 8 H626.9 a8 8 0 0 1 -8 -8 V95 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="113.2" fill="#9aa3b2" text-anchor="middle">What is running, and what each part costs</text>
+  <text x="780.9" y="113.2" fill="#9aa3b2" text-anchor="middle">What is running, and what each part costs</text>
   </g>
-  <path d="M543.9 187 H771.9 a8 8 0 0 1 8 8 V280 a8 8 0 0 1 -8 8 H543.9 a8 8 0 0 1 -8 -8 V195 a8 8 0 0 1 8 -8 Z" fill="#1d2740" stroke="#6f9bff"/>
-  <text x="657.9" y="215.4" fill="#e8e9ee" text-anchor="middle">Any app you type in</text>
-  <path d="M557.9 230 H757.9 a8 8 0 0 1 8 8 V266 a8 8 0 0 1 -8 8 H557.9 a8 8 0 0 1 -8 -8 V238 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M666.9 187 H894.9 a8 8 0 0 1 8 8 V280 a8 8 0 0 1 -8 8 H666.9 a8 8 0 0 1 -8 -8 V195 a8 8 0 0 1 8 -8 Z" fill="#1d2740" stroke="#6f9bff"/>
+  <text x="780.9" y="215.4" fill="#e8e9ee" text-anchor="middle">Any app you type in</text>
+  <path d="M680.9 230 H880.9 a8 8 0 0 1 8 8 V266 a8 8 0 0 1 -8 8 H680.9 a8 8 0 0 1 -8 -8 V238 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="256.2" fill="#a9c3ff" text-anchor="middle">LibreOffice · Firefox · Qt</text>
+  <text x="780.9" y="256.2" fill="#a9c3ff" text-anchor="middle">LibreOffice · Firefox · Qt</text>
   </g>
-  <path d="M471.9 366.4 H843.9 a8 8 0 0 1 8 8 V459.4 a8 8 0 0 1 -8 8 H471.9 a8 8 0 0 1 -8 -8 V374.4 a8 8 0 0 1 8 -8 Z" fill="#251f3d" stroke="#a98cff"/>
-  <text x="657.9" y="394.8" fill="#e8e9ee" text-anchor="middle">grammar-watch</text>
-  <path d="M485.9 409.4 H829.9 a8 8 0 0 1 8 8 V445.4 a8 8 0 0 1 -8 8 H485.9 a8 8 0 0 1 -8 -8 V417.4 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M594.9 366.4 H966.9 a8 8 0 0 1 8 8 V459.4 a8 8 0 0 1 -8 8 H594.9 a8 8 0 0 1 -8 -8 V374.4 a8 8 0 0 1 8 -8 Z" fill="#251f3d" stroke="#a98cff"/>
+  <text x="780.9" y="394.8" fill="#e8e9ee" text-anchor="middle">grammar-watch</text>
+  <path d="M608.9 409.4 H952.9 a8 8 0 0 1 8 8 V445.4 a8 8 0 0 1 -8 8 H608.9 a8 8 0 0 1 -8 -8 V417.4 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="435.6" fill="#c9b6ff" text-anchor="middle">systemd user unit, reads the caret over AT-SPI</text>
+  <text x="780.9" y="435.6" fill="#c9b6ff" text-anchor="middle">systemd user unit, reads the caret over AT-SPI</text>
   </g>
-  <path d="M976.3 366.4 H1196.3 a8 8 0 0 1 8 8 V459.4 a8 8 0 0 1 -8 8 H976.3 a8 8 0 0 1 -8 -8 V374.4 a8 8 0 0 1 8 -8 Z" fill="#331d2a" stroke="#ff85b3"/>
-  <text x="1086.3" y="394.8" fill="#e8e9ee" text-anchor="middle">Suggestion card</text>
-  <path d="M990.3 409.4 H1182.3 a8 8 0 0 1 8 8 V445.4 a8 8 0 0 1 -8 8 H990.3 a8 8 0 0 1 -8 -8 V417.4 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M1099.3 366.4 H1319.3 a8 8 0 0 1 8 8 V459.4 a8 8 0 0 1 -8 8 H1099.3 a8 8 0 0 1 -8 -8 V374.4 a8 8 0 0 1 8 -8 Z" fill="#331d2a" stroke="#ff85b3"/>
+  <text x="1209.3" y="394.8" fill="#e8e9ee" text-anchor="middle">Suggestion card</text>
+  <path d="M1113.3 409.4 H1305.3 a8 8 0 0 1 8 8 V445.4 a8 8 0 0 1 -8 8 H1113.3 a8 8 0 0 1 -8 -8 V417.4 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="1086.3" y="435.6" fill="#ffb0cd" text-anchor="middle">GTK3, placed at the caret</text>
+  <text x="1209.3" y="435.6" fill="#ffb0cd" text-anchor="middle">GTK3, placed at the caret</text>
   </g>
-  <path d="M515.4 545.8 H800.4 a8 8 0 0 1 8 8 V638.8 a8 8 0 0 1 -8 8 H515.4 a8 8 0 0 1 -8 -8 V553.8 a8 8 0 0 1 8 -8 Z" fill="#16302e" stroke="#4fd8c4"/>
-  <text x="657.9" y="574.2" fill="#e8e9ee" text-anchor="middle">grammar-server</text>
-  <path d="M529.4 588.8 H786.4 a8 8 0 0 1 8 8 V624.8 a8 8 0 0 1 -8 8 H529.4 a8 8 0 0 1 -8 -8 V596.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M638.4 545.8 H923.4 a8 8 0 0 1 8 8 V638.8 a8 8 0 0 1 -8 8 H638.4 a8 8 0 0 1 -8 -8 V553.8 a8 8 0 0 1 8 -8 Z" fill="#16302e" stroke="#4fd8c4"/>
+  <text x="780.9" y="574.2" fill="#e8e9ee" text-anchor="middle">grammar-server</text>
+  <path d="M652.4 588.8 H909.4 a8 8 0 0 1 8 8 V624.8 a8 8 0 0 1 -8 8 H652.4 a8 8 0 0 1 -8 -8 V596.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="615" fill="#9ce8dd" text-anchor="middle">Go :8875 · LanguageTool-compatible</text>
+  <text x="780.9" y="615" fill="#9ce8dd" text-anchor="middle">Go :8875 · LanguageTool-compatible</text>
   </g>
-  <path d="M975.8 545.8 H1267.8 a8 8 0 0 1 8 8 V638.8 a8 8 0 0 1 -8 8 H975.8 a8 8 0 0 1 -8 -8 V553.8 a8 8 0 0 1 8 -8 Z" fill="#16303f" stroke="#5fb8e8"/>
-  <text x="1121.8" y="574.2" fill="#e8e9ee" text-anchor="middle">Clients over the same API</text>
-  <path d="M989.8 588.8 H1253.8 a8 8 0 0 1 8 8 V624.8 a8 8 0 0 1 -8 8 H989.8 a8 8 0 0 1 -8 -8 V596.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M1098.8 545.8 H1390.8 a8 8 0 0 1 8 8 V638.8 a8 8 0 0 1 -8 8 H1098.8 a8 8 0 0 1 -8 -8 V553.8 a8 8 0 0 1 8 -8 Z" fill="#16303f" stroke="#5fb8e8"/>
+  <text x="1244.8" y="574.2" fill="#e8e9ee" text-anchor="middle">Clients over the same API</text>
+  <path d="M1112.8 588.8 H1376.8 a8 8 0 0 1 8 8 V624.8 a8 8 0 0 1 -8 8 H1112.8 a8 8 0 0 1 -8 -8 V596.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="1121.8" y="615" fill="#a5d8f5" text-anchor="middle">static UI :8899 · lookup Ctrl+Alt+C</text>
+  <text x="1244.8" y="615" fill="#a5d8f5" text-anchor="middle">static UI :8899 · lookup Ctrl+Alt+C</text>
   </g>
-  <path d="M48 545.8 H362 a8 8 0 0 1 8 8 V638.8 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V553.8 a8 8 0 0 1 8 -8 Z" fill="#1c3020" stroke="#7fce74"/>
-  <text x="205" y="574.2" fill="#e8e9ee" text-anchor="middle">ollama</text>
-  <path d="M62 588.8 H348 a8 8 0 0 1 8 8 V624.8 a8 8 0 0 1 -8 8 H62 a8 8 0 0 1 -8 -8 V596.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M48 478.8 H384 a8 8 0 0 1 8 8 V705.8 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V486.8 a8 8 0 0 1 8 -8 Z" fill="#1c3020" stroke="#7fce74"/>
+  <text x="216" y="523.2" fill="#e8e9ee" text-anchor="middle">AI backend — one of six</text>
+  <path d="M69.5 537.8 H362.5 a8 8 0 0 1 8 8 V589.8 a8 8 0 0 1 -8 8 H69.5 a8 8 0 0 1 -8 -8 V545.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="205" y="615" fill="#b2e5a9" text-anchor="middle">/v2/rewrite only, never the check path</text>
+  <text x="216" y="564" fill="#b2e5a9" text-anchor="middle">ollama · llama.cpp · LM Studio · vLLM ·</text>
+  <text x="216" y="580" fill="#b2e5a9" text-anchor="middle">OpenRouter · any OpenAI-compatible</text>
   </g>
-  <path d="M536.9 725.2 H778.9 a8 8 0 0 1 8 8 V818.2 a8 8 0 0 1 -8 8 H536.9 a8 8 0 0 1 -8 -8 V733.2 a8 8 0 0 1 8 -8 Z" fill="#362708" stroke="#ffc04d"/>
-  <text x="657.9" y="753.6" fill="#e8e9ee" text-anchor="middle">harper-ls</text>
-  <path d="M550.9 768.2 H764.9 a8 8 0 0 1 8 8 V804.2 a8 8 0 0 1 -8 8 H550.9 a8 8 0 0 1 -8 -8 V776.2 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M62 639.8 H370 a8 8 0 0 1 8 8 V691.8 a8 8 0 0 1 -8 8 H62 a8 8 0 0 1 -8 -8 V647.8 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="794.4" fill="#ffd894" text-anchor="middle">ONE process behind ONE mutex</text>
+  <text x="216" y="666" fill="#b2e5a9" text-anchor="middle">chosen with GET/POST /v1/ai, this machine</text>
+  <text x="216" y="682" fill="#b2e5a9" text-anchor="middle">only — never on the check path</text>
   </g>
-  <path d="M496.9 904.6 H818.9 a8 8 0 0 1 8 8 V940.6 a8 8 0 0 1 -8 8 H496.9 a8 8 0 0 1 -8 -8 V912.6 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M659.9 725.2 H901.9 a8 8 0 0 1 8 8 V818.2 a8 8 0 0 1 -8 8 H659.9 a8 8 0 0 1 -8 -8 V733.2 a8 8 0 0 1 8 -8 Z" fill="#362708" stroke="#ffc04d"/>
+  <text x="780.9" y="753.6" fill="#e8e9ee" text-anchor="middle">harper-ls</text>
+  <path d="M673.9 768.2 H887.9 a8 8 0 0 1 8 8 V804.2 a8 8 0 0 1 -8 8 H673.9 a8 8 0 0 1 -8 -8 V776.2 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="930.8" fill="#9aa3b2" text-anchor="middle">200 chars 16 ms · 10 KB 1.8 s · 200 KB 36 s</text>
+  <text x="780.9" y="794.4" fill="#ffd894" text-anchor="middle">ONE process behind ONE mutex</text>
   </g>
-  <line x1="657.9" y1="288" x2="657.9" y2="366.4" stroke="#6f9bff" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-6f9bff)"/>
-  <rect x="609.4" y="319.2" width="97" height="16" fill="#111111"/>
+  <path d="M587.4 904.6 H974.4 a8 8 0 0 1 8 8 V940.6 a8 8 0 0 1 -8 8 H587.4 a8 8 0 0 1 -8 -8 V912.6 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
   <g font-size="12px">
-  <text x="657.9" y="331.4" fill="#a9c3ff" text-anchor="middle">text + caret</text>
+  <text x="780.9" y="930.8" fill="#9aa3b2" text-anchor="middle">200 chars 16 ms · 10 KB 1.8 s · 100 KB 18 s, the cap</text>
   </g>
-  <line x1="851.9" y1="416.9" x2="968.3" y2="416.9" stroke="#a98cff" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-a98cff)"/>
-  <rect x="883.1" y="408.9" width="54" height="16" fill="#111111"/>
+  <line x1="780.9" y1="288" x2="780.9" y2="366.4" stroke="#6f9bff" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-6f9bff)"/>
+  <rect x="732.4" y="319.2" width="97" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="910.1" y="421.1" fill="#c9b6ff" text-anchor="middle">Accept</text>
+  <text x="780.9" y="331.4" fill="#a9c3ff" text-anchor="middle">text + caret</text>
   </g>
-  <line x1="657.9" y1="467.4" x2="657.9" y2="545.8" stroke="#a98cff" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-a98cff)"/>
-  <rect x="602.4" y="498.6" width="111" height="16" fill="#111111"/>
+  <line x1="974.9" y1="416.9" x2="1091.3" y2="416.9" stroke="#a98cff" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-a98cff)"/>
+  <rect x="1006.1" y="408.9" width="54" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="657.9" y="510.8" fill="#c9b6ff" text-anchor="middle">POST /v2/check</text>
+  <text x="1033.1" y="421.1" fill="#c9b6ff" text-anchor="middle">Accept</text>
   </g>
-  <line x1="657.9" y1="646.8" x2="657.9" y2="725.2" stroke="#4fd8c4" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-4fd8c4)"/>
-  <rect x="558.9" y="678" width="198" height="16" fill="#111111"/>
+  <line x1="780.9" y1="467.4" x2="780.9" y2="545.8" stroke="#a98cff" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-a98cff)"/>
+  <rect x="725.4" y="498.6" width="111" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="657.9" y="690.2" fill="#9ce8dd" text-anchor="middle">chunked at 1.5 KB per call</text>
+  <text x="780.9" y="510.8" fill="#c9b6ff" text-anchor="middle">POST /v2/check</text>
   </g>
-  <line x1="967.8" y1="596.3" x2="808.4" y2="596.3" stroke="#5fb8e8" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-5fb8e8)"/>
-  <rect x="839.6" y="588.3" width="97" height="16" fill="#111111"/>
+  <line x1="780.9" y1="646.8" x2="780.9" y2="725.2" stroke="#4fd8c4" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-4fd8c4)"/>
+  <rect x="681.9" y="678" width="198" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="888.1" y="600.5" fill="#a5d8f5" text-anchor="middle">the same API</text>
+  <text x="780.9" y="690.2" fill="#9ce8dd" text-anchor="middle">chunked at 1.5 KB per call</text>
   </g>
-  <line x1="507.4" y1="596.3" x2="370" y2="596.3" stroke="#7fce74" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-7fce74)"/>
-  <rect x="401.2" y="588.3" width="75" height="16" fill="#111111"/>
+  <line x1="1090.8" y1="596.3" x2="931.4" y2="596.3" stroke="#5fb8e8" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-5fb8e8)"/>
+  <rect x="962.6" y="588.3" width="97" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="438.7" y="600.5" fill="#b2e5a9" text-anchor="middle">on demand</text>
+  <text x="1011.1" y="600.5" fill="#a5d8f5" text-anchor="middle">the same API</text>
   </g>
-  <line x1="657.9" y1="826.2" x2="657.9" y2="904.6" stroke="#ffc04d" stroke-width="1.6" marker-end="url(#r01ba92c0-arrow-ffc04d)"/>
-  <rect x="605.9" y="857.4" width="104" height="16" fill="#111111"/>
+  <line x1="630.4" y1="596.3" x2="392" y2="596.3" stroke="#7fce74" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-7fce74)"/>
+  <rect x="423.2" y="588.3" width="176" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="657.9" y="869.6" fill="#ffd894" text-anchor="middle">measured here</text>
+  <text x="511.2" y="600.5" fill="#b2e5a9" text-anchor="middle">on demand, for Rephrase</text>
+  </g>
+  <line x1="780.9" y1="826.2" x2="780.9" y2="904.6" stroke="#ffc04d" stroke-width="1.6" marker-end="url(#r42f2a967-arrow-ffc04d)"/>
+  <rect x="728.9" y="857.4" width="104" height="16" fill="#111111"/>
+  <g font-size="12px">
+  <text x="780.9" y="869.6" fill="#ffd894" text-anchor="middle">measured here</text>
   </g>
 </svg>

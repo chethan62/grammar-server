@@ -37,16 +37,17 @@ node engine "grammar-server"  below watch  gap: normal  style: engine
 node engine.sub "Go :8875 · LanguageTool-compatible" (size: small, color: #9ce8dd)  below engine text  style: sublabel
 node clients "Clients over the same API"  right of engine  gap: normal  style: clients
 node clients.sub "static UI :8899 · lookup Ctrl+Alt+C" (size: small, color: #a5d8f5)  below clients text  style: sublabel
-node ollama "ollama"  left of engine  gap: normal  style: ollama
-node ollama.sub "/v2/rewrite only, never the check path" (size: small, color: #b2e5a9)  below ollama text  style: sublabel
+node ai "AI backend — one of six"  left of engine  gap: normal  style: ollama
+node ai.sub "ollama · llama.cpp · LM Studio · vLLM · OpenRouter · any OpenAI-compatible" (wrap: 44, size: small, color: #b2e5a9)  below ai text  style: sublabel
+node ai.path "chosen with GET/POST /v1/ai, this machine only — never on the check path" (wrap: 44, size: small, color: #b2e5a9)  below ai.sub text  style: sublabel
 node harper "harper-ls"  below engine  gap: normal  style: harper
 node harper.sub "ONE process behind ONE mutex" (size: small, color: #ffd894)  below harper text  style: sublabel
-node costs "200 chars 16 ms · 10 KB 1.8 s · 200 KB 36 s" (wrap: 64)  below harper  gap: tight  style: caption
+node costs "200 chars 16 ms · 10 KB 1.8 s · 100 KB 18 s, the cap" (wrap: 64)  below harper  gap: tight  style: caption
 
 edge apps -> watch    "text + caret" (size: small, color: #a9c3ff)  style: apps
 edge watch -> card     "Accept" (size: small, color: #c9b6ff)  style: watch
 edge watch -> engine   "POST /v2/check" (size: small, color: #c9b6ff)  style: watch
 edge engine -> harper  "chunked at 1.5 KB per call" (size: small, color: #9ce8dd)  style: engine
 edge clients -> engine "the same API" (size: small, color: #a5d8f5)  style: clients
-edge engine -> ollama  "on demand" (size: small, color: #b2e5a9)  style: ollama
+edge engine -> ai  "on demand, for Rephrase" (size: small, color: #b2e5a9)  style: ollama
 edge harper -> costs   "measured here" (size: small, color: #ffd894)  style: harper

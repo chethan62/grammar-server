@@ -126,18 +126,21 @@ def build():
         'node engine.sub "Go :8875 · LanguageTool-compatible" (size: small, color: %s)  below engine text  style: sublabel' % LAYERS["engine"]["ink"],
         'node clients "Clients over the same API"  right of engine  gap: normal  style: clients',
         'node clients.sub "static UI :8899 · lookup Ctrl+Alt+C" (size: small, color: %s)  below clients text  style: sublabel' % LAYERS["clients"]["ink"],
-        'node ollama "ollama"  left of engine  gap: normal  style: ollama',
-        'node ollama.sub "/v2/rewrite only, never the check path" (size: small, color: %s)  below ollama text  style: sublabel' % LAYERS["ollama"]["ink"],
+        # The green layer is the AI tier. It used to be one hard-wired Ollama box; it is
+        # now a choice of six backends behind /v1/ai, and the box says so.
+        'node ai "AI backend — one of six"  left of engine  gap: normal  style: ollama',
+        'node ai.sub "ollama · llama.cpp · LM Studio · vLLM · OpenRouter · any OpenAI-compatible" (wrap: 44, size: small, color: %s)  below ai text  style: sublabel' % LAYERS["ollama"]["ink"],
+        'node ai.path "chosen with GET/POST /v1/ai, this machine only — never on the check path" (wrap: 44, size: small, color: %s)  below ai.sub text  style: sublabel' % LAYERS["ollama"]["ink"],
         'node harper "harper-ls"  below engine  gap: normal  style: harper',
         'node harper.sub "ONE process behind ONE mutex" (size: small, color: %s)  below harper text  style: sublabel' % LAYERS["harper"]["ink"],
-        'node costs "200 chars 16 ms · 10 KB 1.8 s · 200 KB 36 s" (wrap: 64)  below harper  gap: tight  style: caption',
+        'node costs "200 chars 16 ms · 10 KB 1.8 s · 100 KB 18 s, the cap" (wrap: 64)  below harper  gap: tight  style: caption',
         "",
         'edge apps -> watch    "text + caret" (size: small, color: %s)  style: apps' % LAYERS["apps"]["ink"],
         'edge watch -> card     "Accept" (size: small, color: %s)  style: watch' % LAYERS["watch"]["ink"],
         'edge watch -> engine   "POST /v2/check" (size: small, color: %s)  style: watch' % LAYERS["watch"]["ink"],
         'edge engine -> harper  "chunked at 1.5 KB per call" (size: small, color: %s)  style: engine' % LAYERS["engine"]["ink"],
         'edge clients -> engine "the same API" (size: small, color: %s)  style: clients' % LAYERS["clients"]["ink"],
-        'edge engine -> ollama  "on demand" (size: small, color: %s)  style: ollama' % LAYERS["ollama"]["ink"],
+        'edge engine -> ai  "on demand, for Rephrase" (size: small, color: %s)  style: ollama' % LAYERS["ollama"]["ink"],
         'edge harper -> costs   "measured here" (size: small, color: %s)  style: harper' % LAYERS["harper"]["ink"],
     ]
     return "\n".join(out) + "\n"
