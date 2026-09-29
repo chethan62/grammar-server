@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Stats is a deterministic delivery report: counts, sentence shape, and the
@@ -55,6 +56,9 @@ func Measure(text string) Stats {
 	longest := 0
 	for _, s := range sentences {
 		n := len(wordsOf(s))
+		if n == 0 {
+			continue // a punctuation-only fragment ("...") is not a sentence
+		}
 		perSentence = append(perSentence, n)
 		if n > longest {
 			longest = n
@@ -86,27 +90,119 @@ func Measure(text string) Stats {
 	return st
 }
 
-// splitSentences splits on ., ! and ?.
+// splitSentences splits text into sentences for the counts and scores above.
 //
-// ponytail: no abbreviation table, so "e.g." and "Dr." count as sentence ends
-// and inflate the count slightly. That shows up as a fraction of a grade level,
-// which is inside the tolerance of every score above — add an abbreviation list
-// only if a UI ever shows sentence counts as a hard number.
+// Not every period is a sentence end, and the counts are shown as hard numbers by
+// the UI (and feed every score above), so the four rules below are the ones that
+// matter in real prose: "Dr. Smith" is one sentence, "1.5 lakh" is one, a URL or a
+// file name is one, and an ellipsis is not a sentence end at all.
+//
+// The period after an abbreviation is the one case that needs data, so there is a
+// table — the size that used to be deferred until a UI showed sentence counts:
+// that UI is /v2/stats plus grammar-ui, so it is here.
 func splitSentences(text string) []string {
 	var out []string
 	start := 0
-	for i, r := range text {
-		if r == '.' || r == '!' || r == '?' {
-			if s := strings.TrimSpace(text[start : i+1]); s != "" {
-				out = append(out, s)
-			}
-			start = i + 1
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if c != '.' && c != '!' && c != '?' {
+			continue
 		}
+		if c == '.' && !endsSentence(text, i) {
+			continue
+		}
+		if s := strings.TrimSpace(text[start : i+1]); s != "" {
+			out = append(out, s)
+		}
+		start = i + 1
 	}
 	if s := strings.TrimSpace(text[start:]); s != "" {
 		out = append(out, s)
 	}
 	return out
+}
+
+// abbreviations always sit inside a sentence: after a title or a latin
+// abbreviation, prose never starts a new sentence ("Mr. Smith", "e.g. this").
+var abbreviations = map[string]bool{
+	"mr": true, "mrs": true, "ms": true, "dr": true, "prof": true, "sr": true,
+	"jr": true, "st": true, "vs": true, "eg": true, "ie": true, "no": true,
+	"fig": true, "vol": true, "approx": true, "dept": true, "univ": true,
+	"est": true, "misc": true, "pvt": true,
+}
+
+// abbreviationsThatCanEnd is the other half: "It works at Acme Inc." is a sentence
+// and "Jan." is not, so for these the dot ends a sentence only when a capital
+// follows ("Inc. They ship weekly." vs "Inc. and its staff"). A digit means the
+// abbreviation is attached to a number — "Jan. 5" — never a new sentence.
+var abbreviationsThatCanEnd = map[string]bool{
+	"etc": true, "inc": true, "ltd": true, "co": true,
+	"jan": true, "feb": true, "mar": true, "apr": true, "jun": true, "jul": true,
+	"aug": true, "sep": true, "sept": true, "oct": true, "nov": true, "dec": true,
+}
+
+// endsSentence reports whether the '.' at i ends a sentence.
+func endsSentence(text string, i int) bool {
+	// Part of a run of dots: "..." is not three sentence ends. The last dot is
+	// rejected here too, and the sentence it sits in ends at the next real one.
+	if i > 0 && text[i-1] == '.' {
+		return false
+	}
+	// A period with no whitespace after it is inside a token, not after a
+	// sentence: example.com, report.txt, a.b. Closing punctuation may sit
+	// between the dot and the space.
+	j := i + 1
+	for j < len(text) {
+		r, size := utf8.DecodeRuneInString(text[j:])
+		if !strings.ContainsRune(")]}\"'”’", r) {
+			break
+		}
+		j += size
+	}
+	if j < len(text) {
+		if r, _ := utf8.DecodeRuneInString(text[j:]); !unicode.IsSpace(r) {
+			return false
+		}
+	}
+	// An abbreviation or an initial: "Dr. Smith", "R. K. Narayan". A period after
+	// a number is not one ("It grew to 5.") — that word is not in the table.
+	word := wordBefore(text, i)
+	switch {
+	case abbreviations[word]:
+		return false
+	case abbreviationsThatCanEnd[word]:
+		return nextStartsUpper(text, j)
+	}
+	return len(word) != 1
+}
+
+// nextStartsUpper reports whether the next letter after from is a capital. A digit
+// first (the 5 in "Jan. 5") is not a new sentence.
+func nextStartsUpper(text string, from int) bool {
+	for i := from; i < len(text); {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		if unicode.IsLetter(r) {
+			return unicode.IsUpper(r)
+		}
+		if unicode.IsDigit(r) {
+			return false
+		}
+		i += size
+	}
+	return false
+}
+
+// wordBefore is the run of letters ending just before i, lowercased.
+func wordBefore(text string, i int) string {
+	start := i
+	for start > 0 {
+		r, size := utf8.DecodeLastRuneInString(text[:start])
+		if !unicode.IsLetter(r) {
+			break
+		}
+		start -= size
+	}
+	return strings.ToLower(text[start:i])
 }
 
 // wordsOf splits on anything that is not a letter, digit, apostrophe or hyphen,

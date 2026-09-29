@@ -45,6 +45,43 @@ func TestMeasureCounts(t *testing.T) {
 	}
 }
 
+// Every one of these was wrong before the splitter learned what a period is:
+// titles, initials, decimals, times, percentages, URLs and ellipses all counted as
+// sentence ends, and the counts feed mean/longest sentence length and every score
+// downstream. Expected counts are what a human would say out loud.
+func TestSentenceBoundariesInRealProse(t *testing.T) {
+	cases := map[string]int{
+		"Dr. Smith went to Washington. He liked it.":                2,
+		"The price is 1.5 lakh rupees. That is high.":               2,
+		"R. K. Narayan wrote novels. He lived in Mysore.":           2,
+		"The meeting starts at 10.30 a.m. today. Do not be late.":   2,
+		"Sales grew 12.5% this year. Profit followed.":              2,
+		"See https://example.com/a.b for details. It explains all.": 2,
+		"I waited... then I left. It was late.":                     2,
+		"Mr. and Mrs. Rao met Prof. Iyer on Jan. 5. They talked.":   2,
+		"The file report.txt is ready. Send it today.":              2,
+		"He said \"Stop.\" Then he left.":                           2,
+		"It grew to 5. Nobody complained.":                          2,
+		"It works at Acme Inc. They ship weekly.":                   2,
+		"The order came from Acme Ltd. Then it shipped.":            2,
+		"Bring pens, paper, etc. Then we start.":                    2,
+		"The report is due on Jan. 5. Send it early.":               2,
+		"Acme Inc. and its staff shipped it.":                       1,
+		// Lowercase prose still has two sentences: an uppercase first letter is a
+		// hint, never the rule.
+		"the fox ran. the dog slept.": 2,
+		// A punctuation-only fragment is not a sentence of its own.
+		"Hello. ... World.": 2,
+		// No sentence end at all is still one sentence.
+		"the report is ready": 1,
+	}
+	for text, want := range cases {
+		if got := Measure(text).Sentences; got != want {
+			t.Errorf("Measure(%q).Sentences = %d, want %d", text, got, want)
+		}
+	}
+}
+
 func TestSyllables(t *testing.T) {
 	cases := map[string]int{
 		"cat": 1, "beautiful": 3, "make": 1, "table": 2, "the": 1,

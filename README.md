@@ -66,6 +66,12 @@ query parameters work too; LT clients use all three:
   tables, comma run-ons) — never inside a word, which the engine would report as two
   misspellings.
 
+`/v2/stats` counts sentences the way a human would: a period after an abbreviation,
+an initial, a decimal, a time, a URL or a file name does not start a new sentence
+(`Dr.`, `R. K.`, `1.5`, `10.30 a.m.`, `example.com`, `report.txt`), and a
+punctuation-only fragment is not a sentence. Those counts feed mean/longest sentence
+length and the Flesch/Fog scores above them.
+
 Other endpoints: `GET /` (an index of the endpoints below — this server is
 API-only now; the UI is a separate static page, [grammar-ui](https://github.com/chethan62/grammar-ui),
 which you point at this origin), `GET /v2/stats` (delivery metrics),
