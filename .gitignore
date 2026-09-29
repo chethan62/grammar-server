@@ -2,3 +2,8 @@ bin/
 dist/
 /grammar-server
 *.log
+
+# Python bytecode: docs/palette.py generates the architecture diagram, and importing it
+# (or running it) drops a cache directory next to it. Never commit it.
+__pycache__/
+*.pyc
