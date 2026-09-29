@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -198,9 +199,18 @@ type Server struct {
 	eng     *engine.Harper
 	version string
 
-	// rw is nil unless EnableRewrite attached a local model. Every other
-	// endpoint behaves identically while it is nil, which is the normal case.
-	rw *rewrite.Client
+	// rw is nil unless a rewrite backend is configured. Every other endpoint
+	// behaves identically while it is nil, which is the normal case.
+	//
+	// It is swappable at runtime (the UI can change backends without a restart),
+	// so it is read under rwMu and never called directly. rwProvider/rwURL/rwModel
+	// travel with it because the /v1/ai endpoint reports them, and a client
+	// interface alone cannot name the backend it is.
+	rwMu       sync.Mutex
+	rw         rewrite.Rewriter
+	rwProvider string
+	rwURL      string
+	rwModel    string
 }
 
 // Version is what /status and every response report. It is set at build time from
@@ -220,7 +230,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v2/stats", s.handleStats)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
 	mux.HandleFunc("/status", s.handleRoot)
-	mux.HandleFunc("/", s.handleRoot) // API index: the UI lives in its own repo now
+	mux.HandleFunc("/v1/ai", s.handleAI) // read + set the rewrite backend (writes: this machine only)
+	mux.HandleFunc("/", s.handleRoot)    // API index: the UI lives in its own repo now
 	return logRequests(mux)
 }
 
@@ -237,6 +248,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"endpoints": []string{
 			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
 			"POST /v2/stats", "GET /v2/languages", "GET /status",
+			"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
 		},
 		"ui": "https://github.com/chethan62/grammar-ui — static; serve it and set its API base to this origin",
 	})

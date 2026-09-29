@@ -17,6 +17,7 @@ import (
 	"grammar-server/internal/api"
 	"grammar-server/internal/config"
 	"grammar-server/internal/engine"
+	"grammar-server/internal/rewrite"
 )
 
 func main() {
@@ -63,11 +64,29 @@ func main() {
 	defer h.Close()
 
 	srv := api.NewServer(h)
-	if cfg.RewriteModel != "" {
-		// Local rewriting for POST /v2/rewrite. Optional by design: with Ollama
-		// stopped, every other endpoint behaves exactly as before.
-		srv.EnableRewrite(cfg.OllamaURL, cfg.RewriteModel)
-		log.Printf("rewriting with %s via %s", cfg.RewriteModel, cfg.OllamaURL)
+
+	// Local rewriting for POST /v2/rewrite. Optional by design: with the backend
+	// stopped, every other endpoint behaves exactly as before.
+	//
+	// The config file sets the default backend; a backend chosen from the UI
+	// (POST /v1/ai, saved in the user's config directory) outranks it, because a
+	// setting that silently reverts on restart is worse than no setting.
+	provider, rwURL, model := cfg.RewriteProvider, cfg.RewriteURL, cfg.RewriteModel
+	if saved, ok := api.LoadSavedAI(); ok {
+		if saved.Provider == rewrite.ProviderNone {
+			provider, model = rewrite.ProviderNone, ""
+		} else if saved.Provider != "" {
+			provider, model = saved.Provider, saved.Model
+			if saved.URL != "" {
+				rwURL = saved.URL
+			}
+		}
+	}
+	if model != "" && provider != rewrite.ProviderNone {
+		srv.SetRewrite(provider, rwURL, model)
+		log.Printf("rewriting with %s (%s) via %s", model, provider, rwURL)
+	} else {
+		log.Printf("rewriting is off: POST /v2/rewrite answers 503 (choose a backend with GET/POST /v1/ai)")
 	}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpSrv := &http.Server{

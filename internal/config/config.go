@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"gopkg.in/yaml.v3"
+
+	"grammar-server/internal/rewrite"
 )
 
 // Config is the full grammar-server configuration.
@@ -20,8 +22,15 @@ type Config struct {
 	// Local rewriting. An empty rewrite_model disables POST /v2/rewrite (it then
 	// answers 503 with instructions); no other endpoint needs a model, and the
 	// server behaves exactly the same with Ollama stopped.
-	OllamaURL    string `yaml:"ollama_url"    json:"ollama_url"`
-	RewriteModel string `yaml:"rewrite_model" json:"rewrite_model"`
+	// RewriteProvider names the backend: ollama, llamacpp, lmstudio, vllm,
+	// openrouter, openai (any OpenAI-compatible server), or none.
+	RewriteProvider string `yaml:"rewrite_provider" json:"rewrite_provider"`
+	RewriteURL      string `yaml:"rewrite_url"      json:"rewrite_url"`
+	RewriteModel    string `yaml:"rewrite_model"    json:"rewrite_model"`
+
+	// OllamaURL is the pre-provider spelling of rewrite_url. Still read so an
+	// existing config keeps working; rewrite_url wins if both are set.
+	OllamaURL string `yaml:"ollama_url" json:"ollama_url,omitempty"`
 }
 
 // Defaults returns a Config with sensible defaults.
@@ -41,8 +50,9 @@ func Defaults() Config {
 		Harper:  "harper-ls",
 		LogFmt:  "text",
 
-		OllamaURL:    "http://127.0.0.1:11434",
-		RewriteModel: "qwen2.5:1.5b",
+		RewriteProvider: "ollama",
+		RewriteURL:      "http://127.0.0.1:11434",
+		RewriteModel:    "qwen2.5:1.5b",
 	}
 }
 
@@ -63,6 +73,15 @@ func Load(path string) (Config, error) {
 	if err := yaml.Unmarshal(b, &cfg); err != nil {
 		return cfg, err
 	}
+	// An older config names the URL ollama_url; it is the same field.
+	if cfg.RewriteURL == "" || cfg.RewriteURL == Defaults().RewriteURL {
+		if cfg.OllamaURL != "" {
+			cfg.RewriteURL = cfg.OllamaURL
+		}
+	}
+	if cfg.RewriteProvider == "" {
+		cfg.RewriteProvider = "ollama"
+	}
 	return cfg, nil
 }
 
@@ -79,6 +98,9 @@ func (c Config) Validate() error {
 	}
 	if c.LogFmt != "text" && c.LogFmt != "json" {
 		return fmt.Errorf("log_fmt must be 'text' or 'json', got %q", c.LogFmt)
+	}
+	if _, ok := rewrite.Resolve(c.RewriteProvider); !ok && c.RewriteProvider != "none" {
+		return fmt.Errorf("unknown rewrite_provider %q (see rewrite.Presets)", c.RewriteProvider)
 	}
 	return nil
 }
