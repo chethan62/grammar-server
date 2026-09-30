@@ -63,7 +63,8 @@ query parameters work too; LT clients use all three:
   comma-separated string, like every other list parameter. `motherTongue` is
   accepted and ignored — it is part of the client contract, not a behaviour this
   server has.
-- `GET /status` reports the dialect the engine is currently configured for.
+- `GET /status` reports the dialect the engine is currently configured for, and the address it
+  was launched on (`listen`), so a client can tell loopback from the network without asking.
 - `replacements[]` come from harper-ls code actions.
 - Every key LanguageTool sends is present, including the ones a client reads without
   checking: `shortMessage` (empty when the rule has no short form), `sentenceRanges`
@@ -180,7 +181,8 @@ What that costs: the text you paste travels unencrypted over the network, there 
 authentication, and every endpoint on the engine is reachable — including `/v2/rewrite`,
 which spends CPU on ollama. Checks are serialized, so a busy client slows everyone's. Put
 `--host 127.0.0.1` back in `deployments/systemd/grammar-server.service` and `make install` to go
-back to loopback-only.
+back to loopback-only. `grammar-doctor` reports which of the two the running engine is in, so
+the exposure is readable without opening the unit file.
 
 ## AppImage (retired)
 

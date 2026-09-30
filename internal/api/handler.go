@@ -199,6 +199,12 @@ type Server struct {
 	eng     *engine.Harper
 	version string
 
+	// listen is the host:port this process was started with, reported by /status. It
+	// is a property of how the binary was launched rather than of the engine, so main
+	// sets it, and it is reported at all because who can reach this API is the one
+	// fact a diagnostic about it cannot derive from anything else here.
+	listen string
+
 	// rw is nil unless a rewrite backend is configured. Every other endpoint
 	// behaves identically while it is nil, which is the normal case.
 	//
@@ -225,6 +231,10 @@ var Version = "dev"
 func NewServer(eng *engine.Harper) *Server {
 	return &Server{eng: eng, version: Version, cache: newLintCache(defaultCacheEntries)}
 }
+
+// SetListen records the host:port the process was launched with, so /status can
+// report it. Empty when a server is built without one (tests).
+func (s *Server) SetListen(addr string) { s.listen = addr }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -253,6 +263,9 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"status":  "OK",
 		"version": s.version,
 		"dialect": s.eng.Dialect(),
+		// Who can reach this API belongs in the status: the default is loopback and
+		// --host 0.0.0.0 puts every endpoint on the network, unauthenticated.
+		"listen": s.listen,
 		"endpoints": []string{
 			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
 			"POST /v2/stats", "GET /v2/languages", "GET /status",

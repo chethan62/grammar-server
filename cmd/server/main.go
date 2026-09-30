@@ -89,6 +89,7 @@ func main() {
 		log.Printf("rewriting is off: POST /v2/rewrite answers 503 (choose a backend with GET/POST /v1/ai)")
 	}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	srv.SetListen(addr)
 	httpSrv := &http.Server{
 		Addr:        addr,
 		Handler:     corsMiddleware(srv.Handler()),

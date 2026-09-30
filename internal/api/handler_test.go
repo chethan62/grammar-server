@@ -697,3 +697,34 @@ func utf16Slice(text string, offset, length int64) string {
 	}
 	return b.String()
 }
+
+// /status has to say which address the process was started with: who can reach this
+// API is a property of how it was launched and nothing else on the server knows it, so
+// a dropped or unwired field is invisible until someone reads /status and believes it.
+func TestStatusReportsListenAddress(t *testing.T) {
+	h, err := engine.NewHarper("harper-ls", "American", nil)
+	if err != nil {
+		t.Skipf("harper-ls not available: %v", err)
+	}
+	defer h.Close()
+
+	srv := api.NewServer(h)
+	srv.SetListen("0.0.0.0:8875")
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Listen string `json:"listen"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Listen != "0.0.0.0:8875" {
+		t.Fatalf("/status reported listen %q, want the address the server was launched with", out.Listen)
+	}
+}
