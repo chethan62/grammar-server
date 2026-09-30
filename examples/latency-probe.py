@@ -121,9 +121,14 @@ def main():
     # runs are not all the same text. Break either and the table measures something other than a check.
     assert "office" in text_of(1000) and len(text_of(1000)) == 1000, "run 0 is not the plain, full-size sentence"
     assert text_of(1000, 1) != text_of(1000, 2), "the runs share their text: the cache will answer them"
-    assert args.runs <= len(WORDS), \
-        "--runs %d exceeds the %d-word pool: runs that pick the same words repeat and the cache answers them" \
-        % (args.runs, len(WORDS))
+    if args.runs > len(WORDS):
+        # Refused, not asserted: this is a user asking for more runs than there are nouns to vary,
+        # and the failure mode is a table of cache hits, which is the one thing this probe exists
+        # to stop. Add words to WORDS (each one verified lint-neutral) to raise the ceiling.
+        print("--runs %d exceeds the %d-word pool: further runs would repeat text and be answered "
+              "from the cache instead of measured. Lower --runs or add words to WORDS."
+              % (args.runs, len(WORDS)), file=sys.stderr)
+        return 2
     before = cache_counters(args.api)
     print("machine: load=%s temps=%s C" % (state["load"], state["temps_c"]))
     print("%-10s %-6s %8s %8s %8s %9s" % ("size", "runs", "p50 ms", "p95 ms", "max ms", "matches"))
