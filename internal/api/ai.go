@@ -51,6 +51,7 @@ type AIState struct {
 	Hint      string           `json:"hint"`
 	KeyEnv    string           `json:"keyEnv,omitempty"`
 	KeySet    bool             `json:"keySet"`
+	KeySource string           `json:"keySource,omitempty"`
 	Reachable bool             `json:"reachable"`
 	Models    []string         `json:"models"`
 	Presets   []rewrite.Preset `json:"presets"`
@@ -88,6 +89,9 @@ func (s *Server) aiState(r *http.Request) AIState {
 	if p, ok := rewrite.Resolve(provider); ok {
 		st.Protocol, st.Local, st.Hint, st.KeyEnv = p.Protocol, p.Local, p.Hint, p.KeyEnv
 		st.KeySet = p.KeyEnv != "" && rewrite.APIKeyFor(provider) != ""
+		// Where it came from, so the panel can say "your desktop keyring" rather than describing
+		// a file that may no longer be the one holding it.
+		st.KeySource = rewrite.KeySourceFor(provider)
 	}
 	if rw == nil {
 		return st

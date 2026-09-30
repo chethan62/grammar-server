@@ -17,6 +17,7 @@ import (
 // project's promise was that a key never leaves the machine it was typed on, and a settings panel
 // that echoes a secret back over HTTP would break it for anyone who can reach the port.
 func TestAISavesAPIKeyWithoutEverReturningIt(t *testing.T) {
+	keyringStubbed(t)
 	backend := fakeBackend(t)
 	s := newTestServer(t)
 
@@ -80,6 +81,7 @@ func TestAISavesAPIKeyWithoutEverReturningIt(t *testing.T) {
 // the response said keySet true and "no OPENAI_API_KEY" in the same breath, because the warning was
 // computed before the key was written.
 func TestAIKeyInTheSameRequestSuppressesTheMissingKeyWarning(t *testing.T) {
+	keyringStubbed(t)
 	s := newTestServer(t)
 	body := `{"provider":"openai","url":"http://127.0.0.1:9","model":"m","apiKey":"a-real-looking-key"}`
 	rec := httptest.NewRecorder()
@@ -104,6 +106,7 @@ func TestAIKeyInTheSameRequestSuppressesTheMissingKeyWarning(t *testing.T) {
 // An empty apiKey means "leave it alone", which is what a password box that cannot show the saved
 // value must send. Without this, saving the form would wipe a key nobody touched.
 func TestAIEmptyKeyLeavesTheStoredOneAlone(t *testing.T) {
+	keyringStubbed(t)
 	backend := fakeBackend(t)
 	s := newTestServer(t)
 	if err := rewrite.SaveKey("the-original-key"); err != nil {
@@ -128,4 +131,13 @@ func TestAIEmptyKeyLeavesTheStoredOneAlone(t *testing.T) {
 	if got := rewrite.APIKeyFor("openai"); got != "replacement-key" {
 		t.Errorf("APIKeyFor = %q after saving a new key, want it replaced", got)
 	}
+}
+
+// keyringStubbed keeps the tests in this file out of the developer's own keyring. The engine prefers
+// the desktop keyring when secret-tool is present, so a test that saves a key through the API writes
+// a real item into the session wallet without this — which is exactly what happened when the keyring
+// became the preferred home, and CI stayed green throughout because a CI runner has no keyring to
+// pollute. GRAMMAR_NO_KEYRING is the same switch an install can use to stay file-only.
+func keyringStubbed(t *testing.T) {
+	t.Setenv("GRAMMAR_NO_KEYRING", "1")
 }

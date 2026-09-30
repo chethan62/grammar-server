@@ -19,8 +19,10 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -80,9 +82,22 @@ func KeyFilePath() string {
 	return filepath.Join(dir, "grammar-server", "ai.key")
 }
 
-// SaveKey writes a key for the current backend. 0600 from the first byte written: the file is
-// never briefly readable by anyone else.
+// SaveKey stores a key for the current backend: the desktop keyring when there is one, and that file
+// otherwise. 0600 from the first byte written, so the file is never briefly readable by anyone else.
+//
+// A keyring that refuses — no secret-tool, no session bus, a locked wallet — must never lose the
+// key, so the file is the fallback rather than the loser. When the keyring does take it, the file is
+// removed: a plaintext copy of a secret that is already in the keyring is the exact thing this
+// avoids, and a removal that fails does not fail the save — the keyring is what is read first, so
+// the leftover is a privacy wart rather than a broken key.
 func SaveKey(key string) error {
+	key = strings.TrimSpace(key)
+	if key != "" && keyringPut(key) {
+		if path := KeyFilePath(); path != "" {
+			_ = os.Remove(path) // best effort; see above
+		}
+		return nil
+	}
 	path := KeyFilePath()
 	if path == "" {
 		return os.ErrNotExist
@@ -90,7 +105,7 @@ func SaveKey(key string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(key)+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(key+"\n"), 0o600); err != nil {
 		return err
 	}
 	// WriteFile does not tighten the mode of a file that already exists, and a wholesale edit or a
@@ -98,24 +113,120 @@ func SaveKey(key string) error {
 	return os.Chmod(path, 0o600)
 }
 
-// APIKeyFor reads the environment first, then that file. The environment still wins: a key set
-// that way before the settings API existed keeps working, and keeps meaning what it meant.
-func APIKeyFor(provider string) string {
+// keyFor is the whole answer to "which key is in force, and where did it come from": the environment
+// first, then the desktop keyring, then the file. The environment still wins — a key set that way
+// before the settings API existed keeps working, and keeps meaning what it meant.
+func keyFor(provider string) (string, string) {
 	env := KeyEnvFor(provider)
 	if env == "" {
-		return ""
+		return "", "" // this backend takes no key at all
 	}
 	if value := strings.TrimSpace(getenv(env)); value != "" {
-		return value
+		return value, "env"
+	}
+	if key, _ := keyringGet(); key != "" {
+		return key, "keyring"
 	}
 	path := KeyFilePath()
 	if path == "" {
-		return ""
+		return "", ""
 	}
 	if b, err := os.ReadFile(path); err == nil {
-		return strings.TrimSpace(string(b))
+		if value := strings.TrimSpace(string(b)); value != "" {
+			return value, "file"
+		}
 	}
-	return ""
+	return "", ""
+}
+
+// APIKeyFor is the key itself. Kept as the entry point callers already use.
+func APIKeyFor(provider string) string {
+	value, _ := keyFor(provider)
+	return value
+}
+
+// KeySourceFor names where that key came from — "env", "keyring", "file", or "" for none — so a
+// settings panel can say where a credential actually lives instead of guessing.
+func KeySourceFor(provider string) string {
+	_, source := keyFor(provider)
+	return source
+}
+
+// ---- the desktop keyring ------------------------------------------------------------------------
+
+// A key typed into the settings panel belongs in the keyring: encrypted at rest, unlocked with the
+// login session, and not a plaintext file that follows a config directory into backups and dotfile
+// repositories. secret-tool is libsecret's CLI and is present on both GNOME and KDE desktops.
+//
+// Lookup is cached because it is a process spawn, and a rephrase should not pay for one. A save
+// seeds the cache, since whoever just typed a key is about to press Test.
+var (
+	// A package variable so tests (and CI, which has no keyring at all) never exec a real one.
+	keyringExec = func(ctx context.Context, args ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "secret-tool", args...)
+	}
+	keyringTimeout = 2 * time.Second
+	keyringCached  struct {
+		sync.Mutex
+		read bool
+		key  string
+	}
+)
+
+// keyringOff is the escape hatch, and it exists because of a real accident: this package's tests save
+// keys through the API, and once the keyring became the preferred home, a unit test wrote a real item
+// into the developer's own wallet — while CI, which has no keyring, never noticed anything wrong. A
+// test suite that must not touch the session keyring sets GRAMMAR_NO_KEYRING, and so can an install.
+func keyringOff() bool { return os.Getenv("GRAMMAR_NO_KEYRING") != "" }
+
+// keyringArgs is the item's identity, and it has to be identical for store and lookup or a key is
+// written somewhere nothing reads. One key for the current backend, mirroring the file it replaces.
+func keyringArgs(action string, extra ...string) []string {
+	return append(append([]string{action}, extra...), "service", "grammar-server", "kind", "api-key")
+}
+
+// keyringGet returns the stored key and whether the keyring answered at all. A missing secret-tool is
+// a different thing from "nothing stored": it is what tells SaveKey to keep using the file.
+func keyringGet() (string, bool) {
+	if keyringOff() {
+		return "", false
+	}
+	keyringCached.Lock()
+	if keyringCached.read {
+		key := keyringCached.key
+		keyringCached.Unlock()
+		return key, true
+	}
+	keyringCached.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), keyringTimeout)
+	defer cancel()
+	out, err := keyringExec(ctx, keyringArgs("lookup")...).Output()
+	if err != nil {
+		return "", false
+	}
+	key := strings.TrimSpace(string(out))
+	keyringCached.Lock()
+	keyringCached.read, keyringCached.key = true, key
+	keyringCached.Unlock()
+	return key, true
+}
+
+// keyringPut stores the key and reports whether the keyring took it.
+func keyringPut(key string) bool {
+	if keyringOff() {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), keyringTimeout)
+	defer cancel()
+	cmd := keyringExec(ctx, keyringArgs("store", "--label", "grammar-server: AI key")...)
+	cmd.Stdin = strings.NewReader(strings.TrimSpace(key) + "\n")
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	keyringCached.Lock()
+	keyringCached.read, keyringCached.key = true, strings.TrimSpace(key)
+	keyringCached.Unlock()
+	return true
 }
 
 // getenv is a variable so tests can supply a key without touching the process
