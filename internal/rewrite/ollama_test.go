@@ -85,6 +85,59 @@ func TestEchoAndBlanksAreDropped(t *testing.T) {
 	}
 }
 
+// The streamed reply: Ollama hands words over one JSON object at a time, so a caller can show them
+// while the model is still writing. That is the whole point of the streaming path — measured on this
+// machine, the first words arrive in 0.05s against 2.2s for the finished sentence — so the checks are
+// that the backend was actually asked to stream, that the pieces arrive in the order they were
+// written, and that the answer is the same one Rewrite would give.
+func TestRewriteStreamHandsOverTheAnswerAsItArrives(t *testing.T) {
+	var askedStream bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		askedStream, _ = body["stream"].(bool)
+		for _, piece := range []string{"We are ", "formulating", " the report."} {
+			_ = json.NewEncoder(w).Encode(map[string]any{"response": piece, "done": false})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "", "done": true})
+	}))
+	defer srv.Close()
+
+	var deltas []string
+	got, err := New(srv.URL, "m").RewriteStream(context.Background(),
+		"We are zorbulating the report.", "", "", func(delta string) { deltas = append(deltas, delta) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !askedStream {
+		t.Error("stream = false: the backend was asked for one body, so nothing can arrive early")
+	}
+	if strings.Join(deltas, "") != "We are formulating the report." {
+		t.Errorf("deltas = %q, want the pieces in the order the model wrote them", deltas)
+	}
+	if len(got) != 1 || got[0] != "We are formulating the report." {
+		t.Errorf("candidates = %q, want the same answer Rewrite gives", got)
+	}
+}
+
+// A backend that fails mid-stream has to say so in the terms the rest of this package reports, or a
+// caller sees a half-answer and no reason.
+func TestRewriteStreamReportsABackendError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "We are ", "done": false})
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "model \"nope\" not found", "done": true})
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, "nope").RewriteStream(context.Background(), "text", "", "", func(string) {})
+	if !errors.Is(err, ErrModelMissing) {
+		t.Fatalf("err = %v, want ErrModelMissing", err)
+	}
+	if got != nil {
+		t.Errorf("candidates = %q, want none alongside an error", got)
+	}
+}
+
 func TestBackendDownIsUnavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL

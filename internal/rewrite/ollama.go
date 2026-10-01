@@ -53,10 +53,34 @@ type generateResponse struct {
 // Rewrite returns rephrased versions of text. tone and intent are optional
 // hints ("formal", "concise") and are left out of the prompt when empty.
 func (c *Client) Rewrite(ctx context.Context, text, tone, intent string) ([]string, error) {
+	return c.rewrite(ctx, text, tone, intent, nil)
+}
+
+// RewriteStream is Rewrite with the answer handed over while it is written.
+//
+// Ollama's /api/generate streams one JSON object per line, so a caller can show words as the model
+// produces them instead of waiting for the whole sentence. The candidates returned are exactly what
+// Rewrite returns, parsed from the accumulated text: the deltas are a progress channel, not a
+// different answer, so a caller's final handling is the same either way.
+//
+// A cancelled context — the client went away, or pressed Cancel — reaches Ollama and stops the
+// generation, which is the only cancel path this needs.
+func (c *Client) RewriteStream(ctx context.Context, text, tone, intent string,
+	onDelta func(string)) ([]string, error) {
+	if onDelta == nil {
+		onDelta = func(string) {}
+	}
+	return c.rewrite(ctx, text, tone, intent, onDelta)
+}
+
+// rewrite is the one place that speaks /api/generate: Rewrite and RewriteStream differ only in
+// whether the reply is parsed as one body or as it arrives.
+func (c *Client) rewrite(ctx context.Context, text, tone, intent string,
+	onDelta func(string)) ([]string, error) {
 	body, err := json.Marshal(generateRequest{
 		Model:     c.Model,
 		Prompt:    buildPrompt(text, tone, intent),
-		Stream:    false, // we parse one JSON body, not a stream of them
+		Stream:    onDelta != nil, // one JSON object per line rather than a single body
 		KeepAlive: KeepAlive,
 		Options:   map[string]any{"num_predict": tokenBudget, "temperature": temperature},
 	})
@@ -81,6 +105,10 @@ func (c *Client) Rewrite(ctx context.Context, text, tone, intent string) ([]stri
 	}
 	defer resp.Body.Close()
 
+	if onDelta != nil {
+		return c.collect(resp, text, onDelta)
+	}
+
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading reply: %v", ErrUnavailable, err)
@@ -90,14 +118,48 @@ func (c *Client) Rewrite(ctx context.Context, text, tone, intent string) ([]stri
 		return nil, fmt.Errorf("%w: %s answered %d with %q", ErrUnavailable, c.URL, resp.StatusCode, truncate(string(raw), 120))
 	}
 	if out.Error != "" {
-		low := strings.ToLower(out.Error)
-		if strings.Contains(low, "not found") || strings.Contains(low, "no such model") {
-			return nil, fmt.Errorf("%w: %s", ErrModelMissing, out.Error)
-		}
-		return nil, fmt.Errorf("rewrite backend error: %s", out.Error)
+		return nil, backendError(out.Error)
 	}
 
 	return candidates(out.Response, text), nil
+}
+
+// collect reads a streamed reply: JSON objects one after another, whitespace between them, the last
+// carrying done. A decoder rather than a line scanner, because newline-delimited JSON is still JSON
+// and this way the framing does not depend on how Ollama chooses to separate them.
+func (c *Client) collect(resp *http.Response, text string, onDelta func(string)) ([]string, error) {
+	var full strings.Builder
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var chunk generateResponse
+		if err := decoder.Decode(&chunk); err != nil {
+			if errors.Is(err, io.EOF) {
+				break // a stream that ended without done: use what arrived
+			}
+			return nil, fmt.Errorf("%w: reading stream: %v", ErrUnavailable, err)
+		}
+		if chunk.Error != "" {
+			return nil, backendError(chunk.Error)
+		}
+		if chunk.Response != "" {
+			full.WriteString(chunk.Response)
+			onDelta(chunk.Response)
+		}
+		if chunk.Done {
+			break
+		}
+	}
+	return candidates(full.String(), text), nil
+}
+
+// backendError is what the backend's own complaint means, in the terms the rest of this package
+// reports: a missing model is a thing the user can fix, anything else is the backend failing.
+func backendError(message string) error {
+	low := strings.ToLower(message)
+	if strings.Contains(low, "not found") || strings.Contains(low, "no such model") {
+		return fmt.Errorf("%w: %s", ErrModelMissing, message)
+	}
+	return fmt.Errorf("rewrite backend error: %s", message)
 }
 
 // buildPrompt is Ollama's single-prompt shape: the shared instruction, a blank

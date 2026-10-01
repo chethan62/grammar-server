@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -43,6 +44,10 @@ type RewriteRequest struct {
 	Language string `json:"language"`
 	Tone     string `json:"tone"`   // optional: "formal", "casual", ...
 	Intent   string `json:"intent"` // optional: "concise", "clear", ...
+	// Stream asks for the answer as it is written, one JSON object per line (see streamRewrite). A
+	// backend that cannot do it answers in one body instead, which is the shape every client already
+	// parses, so asking is never a way to break the call.
+	Stream bool `json:"stream,omitempty"`
 }
 
 // RewriteResponse carries the alternatives. model and elapsedMs are reported so
@@ -170,29 +175,20 @@ func (s *Server) handleRewrite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
+	// Streaming, where the backend can. A backend that cannot falls through to the one-body path
+	// below: the reply is then the shape every client already parses, so a request that asks for a
+	// stream is never a request that can fail for asking.
+	if req.Stream {
+		if streamer, ok := rw.(rewrite.Streamer); ok {
+			s.streamRewrite(w, r, streamer, req, provider, model, start)
+			return
+		}
+	}
+
 	candidates, err := rw.Rewrite(r.Context(), req.Text, req.Tone, req.Intent)
 	if err != nil {
-		// Each failure names its own fix: these are the three things a user can
-		// actually do about a local model.
-		switch {
-		case errors.Is(err, rewrite.ErrModelMissing):
-			writeLTError(w, http.StatusServiceUnavailable,
-				"rewrite model %s is not on %s — GET %s/v1/models lists what it has (ollama: ollama pull %s)",
-				model, provider, s.rwURL, model)
-		case errors.Is(err, rewrite.ErrAuth):
-			writeLTError(w, http.StatusServiceUnavailable,
-				"rewrite backend rejected the API key for %s — set %s in the server's environment",
-				provider, rewrite.KeyEnvFor(provider))
-		case errors.Is(err, rewrite.ErrUnavailable):
-			writeLTError(w, http.StatusServiceUnavailable,
-				"rewrite backend unavailable (%s at %s) — %s", provider, s.rwURL, backendHint(provider))
-		case errors.Is(err, rewrite.ErrTimeout):
-			writeLTError(w, http.StatusServiceUnavailable,
-				"rewrite timed out (%s, model %s) — a smaller model or a shorter sentence will answer sooner",
-				err, model)
-		default:
-			writeLTError(w, http.StatusServiceUnavailable, "rewrite failed: %v", err)
-		}
+		writeLTError(w, http.StatusServiceUnavailable, "%s",
+			rewriteFailure(err, s.rwURL, provider, model))
 		return
 	}
 	if len(candidates) == 0 {
@@ -201,6 +197,69 @@ func (s *Server) handleRewrite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, RewriteResponse{
+		Candidates: candidates,
+		Model:      model,
+		Provider:   provider,
+		ElapsedMs:  time.Since(start).Milliseconds(),
+	})
+}
+
+// rewriteFailure is why a rewrite failed, in the terms of what the user can do about it: each failure
+// names its own fix.
+//
+// One place, because the streamed reply has to say the same things in a line as the unstreamed one
+// says in a status — and two copies of these sentences would drift apart the first time either moved.
+func rewriteFailure(err error, url, provider, model string) string {
+	switch {
+	case errors.Is(err, rewrite.ErrModelMissing):
+		return fmt.Sprintf("rewrite model %s is not on %s — GET %s/v1/models lists what it has "+
+			"(ollama: ollama pull %s)", model, provider, url, model)
+	case errors.Is(err, rewrite.ErrAuth):
+		return fmt.Sprintf("rewrite backend rejected the API key for %s — set %s in the server's "+
+			"environment", provider, rewrite.KeyEnvFor(provider))
+	case errors.Is(err, rewrite.ErrUnavailable):
+		return fmt.Sprintf("rewrite backend unavailable (%s at %s) — %s", provider, url,
+			backendHint(provider))
+	case errors.Is(err, rewrite.ErrTimeout):
+		return fmt.Sprintf("rewrite timed out (%s, model %s) — a smaller model or a shorter sentence "+
+			"will answer sooner", err, model)
+	default:
+		return fmt.Sprintf("rewrite failed: %v", err)
+	}
+}
+
+// streamRewrite answers POST /v2/rewrite with the model's words as they arrive.
+//
+// One JSON object per line: {"delta": "..."} while it is writing, then the same body the unstreamed
+// call returns — or {"message": "..."} when it failed, because by then the status line has already
+// gone out. A client tells them apart by which key is present, not by position, which is also why a
+// backend that ignores `stream` and answers in one body still works: that body carries candidates.
+func (s *Server) streamRewrite(w http.ResponseWriter, r *http.Request, streamer rewrite.Streamer,
+	req RewriteRequest, provider, model string, start time.Time) {
+	flusher, _ := w.(http.Flusher)
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.WriteHeader(http.StatusOK)
+	encoder := json.NewEncoder(w)
+	// Each delta is flushed on its own: a progress channel that arrives buffered arrives all at once
+	// at the end, which is the one thing this exists not to do.
+	send := func(value any) {
+		_ = encoder.Encode(value)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	candidates, err := streamer.RewriteStream(r.Context(), req.Text, req.Tone, req.Intent,
+		func(delta string) { send(map[string]string{"delta": delta}) })
+	if err != nil {
+		send(map[string]string{"message": rewriteFailure(err, s.rwURL, provider, model)})
+		return
+	}
+	if len(candidates) == 0 {
+		send(map[string]string{"message": "rewrite returned nothing usable — try again"})
+		return
+	}
+	send(RewriteResponse{
 		Candidates: candidates,
 		Model:      model,
 		Provider:   provider,
