@@ -239,7 +239,8 @@ func (s *Server) SetListen(addr string) { s.listen = addr }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
-	mux.HandleFunc("/v2/ignore", s.handleIgnore) // words to stop reporting (GET reads; writes: this machine only)
+	mux.HandleFunc("/v2/ignore", s.handleIgnore)         // words to stop reporting (GET reads; writes: this machine only)
+	mux.HandleFunc("/v2/dictionary", s.handleDictionary) // words harper-ls itself accepts (GET reads; writes: this machine only)
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
 	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
 	mux.HandleFunc("/v2/stats", s.handleStats)
@@ -271,12 +272,18 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		// client on another machine cannot read the file, and "why is this word not flagged?"
 		// deserves an answer that does not require being on the right host.
 		"ignored": len(readIgnored(ignorePath())),
+		// And how many words harper-ls itself has been taught. Separate from `ignored` on purpose: those
+		// are words this server pretends not to see, these are words the engine knows, and a client that
+		// cannot tell them apart cannot explain why one word is flagged in LibreOffice and another is not.
+		"dictionary": len(listDictionary(dictionaryPath())),
 		"endpoints": []string{
 			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
 			"POST /v2/stats", "GET /v2/languages", "GET /status",
 			"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
 			"POST /v2/ignore (words to stop reporting; this machine only)",
 			"GET /v2/ignore (the words it stops reporting)",
+			"POST /v2/dictionary (teach harper-ls a word; this machine only)",
+			"GET /v2/dictionary (the words harper-ls accepts)",
 		},
 		// There is no page to open. The clients live in the grammar-ui repo and are desktop
 		// programs — a card at the caret, a selection checker on a shortcut, an AI-runner settings

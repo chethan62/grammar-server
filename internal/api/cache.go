@@ -54,6 +54,21 @@ func newLintCache(capacity int) *lintCache {
 // they collect results, and one caller mutating the slice in place would poison
 // the entry for every later reader; a clone costs one small allocation against a
 // ~150 ms engine call, and makes the entry unforgeable from outside.
+// clear drops every entry.
+//
+// Called when something changes what the engine would answer for text already checked. The dictionary is
+// that something: a word taught after a chunk was linted leaves the chunk's stale verdict cached, and the
+// word stays flagged for that exact text forever. The ignore list needs no such call — /v2/ignore filters
+// above the cache, on every request, so its effect is never memoised at all.
+//
+// The hit and miss counters stay: they are lifetime figures for /status, not a description of what is held.
+func (c *lintCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.order = list.New()
+	c.items = map[[32]byte]*list.Element{}
+}
+
 func (c *lintCache) get(key [32]byte) ([]engine.Lint, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
