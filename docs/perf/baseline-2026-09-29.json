@@ -72,5 +72,22 @@
       "matches": 5120
     }
   },
+  "popup_start_ms": {
+    "measured": "2026-10-01",
+    "what": "spawn to PLACED (the card's own line for mapped + positioned + laid out) — the moment it is on screen",
+    "runs": [801, 586, 560],
+    "median": 586,
+    "budget_ms": 200,
+    "breakdown_ms": {
+      "bare_interpreter": 10,
+      "pyside6_qtquick_import": 120,
+      "qml_load_and_map_by_difference": 456
+    },
+    "machine": {
+      "package_temp_c": 81,
+      "load": ["1.10", "1.05", "0.82"]
+    },
+    "conclusion": "Three times the budget, and now the largest user-felt latency: with the adaptive debounce at 300 ms, a suggestion is on screen about 0.9 s after a pause in typing. The upgrade path (one long-lived card over a FIFO) is recorded in docs/architecture.md and deliberately not built."
+  },
   "note": "Sizes <= 1 KB are unaffected by the 1.5 KB chunking and were taken at 20 runs. The large sizes are single runs measured after the chunk fix; before it, 10 KB was 10 037 ms, 50 KB untested, and 200 KB never returned."
 }
