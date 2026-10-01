@@ -15,9 +15,25 @@ Where it goes:
 |---|---|
 | bare interpreter | 10 |
 | `PySide6.QtQuick` import | 120 |
-| QML load + window map/layout (by difference) | 456 |
+| the card's own settle wait before it places itself (`QTimer.singleShot(40, place)`) | 40 |
+| Qt platform plugin + QML object creation + window map/layout (residual) | ~420 |
 
-So the toolkit is not the cost — the QML page is. This is now the largest user-felt latency in the
+**QML compilation is not the cost, and that was worth measuring.** The card loads `grammar-card.qml` from a
+file per process, which makes it look like a candidate for `qmlcachegen` or disk-cache work — a one-liner.
+A cold-vs-warm A/B on `QML_DISK_CACHE_PATH` says otherwise: wiping the cache before every run gave
+709/545/552 ms, keeping it gave 537/556/563, and Qt's own cache files were written either way. That
+difference is inside the noise, so do not go looking for a small fix in that direction. What is left is
+per-process Qt work, which is why the only real fix is to stop starting a process.
+
+The residual was not split further. The phase stamps I put into a scratch copy of the card kept breaking
+its own instrumentation, and a fifth attempt was not worth the time for a number that changes no decision.
+It is a residual, not a measurement of Qt's internals.
+
+**Considered and rejected:** pre-warming a card process on the first keystroke of a burst, so its ~586 ms
+overlaps the 300 ms debounce. It still starts one Qt process per burst and it needs the payload before the
+engine has been asked — a clever way to spend CPU on text that turns out to be fine.
+
+This is now the largest user-felt latency in the
 product: with the debounce adaptive at 300 ms when the engine answers in milliseconds, a suggestion is on
 screen roughly **0.9 s** after a pause in typing, and most of that is the card starting up.
 

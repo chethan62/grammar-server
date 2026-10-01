@@ -81,8 +81,10 @@
     "breakdown_ms": {
       "bare_interpreter": 10,
       "pyside6_qtquick_import": 120,
-      "qml_load_and_map_by_difference": 456
+      "deliberate_settle_wait_before_placing": 40,
+      "qt_setup_and_window_map_residual": 420
     },
+    "qml_compilation": "not the cost: a cold-vs-warm QML_DISK_CACHE_PATH A/B gave 709/545/552 ms vs 537/556/563, a difference inside the noise (Qt writes cache files either way). No small fix exists in that direction.",
     "machine": {
       "package_temp_c": 81,
       "load": ["1.10", "1.05", "0.82"]
