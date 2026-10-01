@@ -112,6 +112,18 @@ which you point at this origin), `GET /v2/stats` (delivery metrics),
 `GET /v2/languages` (entries carry `name`, `code` and `longCode` — clients read the
 last one), `POST /v2/rewrite` (optional, needs a local Ollama).
 
+`POST /v2/rewrite` accepts `{"text": …, "tone": …, "intent": …}` and answers with
+`candidates`, `model`, `provider` and `elapsedMs`. Add `"stream": true` and it answers
+`application/x-ndjson` instead: `{"delta": "…"}` as the model writes, then that same body
+as the last line, or `{"message": "…"}` if it failed after the status line had already
+gone out. A client should tell those apart by which key is present rather than by
+position, because a backend that cannot stream — every backend but Ollama today — ignores
+the flag and answers in one body, which arrives as a single line carrying `candidates`.
+That is what makes it safe to ask for a stream unconditionally, and it is why clients
+disconnect to cancel: the request's context reaches the backend, so the model stops
+generating. On this machine the first line arrives at ~0.45s against ~1.8s for the
+finished sentence.
+
 ## Architecture
 
 ```
