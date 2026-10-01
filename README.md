@@ -279,8 +279,8 @@ harper-ls is looked up on `PATH`, then beside the binary, then `--harper /path/t
 | VS Code (LTeX) | `ltex.languageToolHttpServerUri`: `http://localhost:8875` |
 | Neovim (ltex-ls / null-ls) | point `ltex-ls` at the server |
 | Firefox/Chrome LT extension | settings → custom server URL |
-| LibreOffice | LT extension → custom server |
-| [grammar-ui](https://github.com/chethan62/grammar-ui) | static page; set its API base to this origin |
+| LibreOffice | its own grammar checker → this engine, no extension needed (below) |
+| [grammar-ui](https://github.com/chethan62/grammar-ui) | the desktop card that watches what you type and talks to this engine |
 
 LTeX and the LT extensions send the correctness tier only, so they will not show
 the style hints — those need `level: "picky"` (or `enabledCategories: ["STYLE"]`) in
@@ -299,6 +299,38 @@ uv run --with language_tool_python python examples/lt-client-smoke.py
 
 It exits non-zero if the server is not there or any of that stops holding — curl only
 proves the shapes you thought of, a client proves the ones you did not.
+
+### LibreOffice's own grammar checker
+
+LibreOffice 26.8 ships LanguageTool support, so its own grammar checking can run against this engine:
+no extension, no account, no Java.
+
+- **Tools ▸ Options ▸ Languages and Locales ▸ LanguageTool Server**
+- tick **Enable LanguageTool**
+- set **Base URL** to `http://127.0.0.1:8875`
+- **revert:** untick the box. Nothing else is changed.
+
+It lives per user profile in `registrymodifications.xcu` at
+`/org.openoffice.Office.Linguistic/GrammarChecking/LanguageTool` → `BaseURL` (with `IsEnabled`). Both
+names are taken from LibreOffice's own configuration schema, and confirmed through its configuration API:
+setting them over `com.sun.star.configuration` resolves and reads back.
+
+```bash
+examples/lo-grammar-server-check.sh     # engine up? setting present? how to watch a request
+```
+
+**Proven, and not proven.** The engine's half is proven above, against a real client library.
+LibreOffice's half is not: with the setting in place, opening a document produced no request at the
+engine, and the GUI instance launched to test typing never put a window or a document on the
+accessibility bus on this machine — so the typing trigger was never reached. Watch it happen instead of
+taking this file's word for it:
+
+```bash
+journalctl --user -u grammar-server -f | grep v2/check     # then type in Writer
+```
+
+A line appearing as you type is the proof. Nothing appearing leaves two candidates untested here: the
+per-document "check as you type" setting, and which checker is active under **Writing Aids**.
 
 ## Limitations
 
