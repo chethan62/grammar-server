@@ -129,12 +129,13 @@ func (c *Client) rewrite(ctx context.Context, text, tone, intent string,
 // and this way the framing does not depend on how Ollama chooses to separate them.
 func (c *Client) collect(resp *http.Response, text string, onDelta func(string)) ([]string, error) {
 	var full strings.Builder
+	finished := false
 	decoder := json.NewDecoder(resp.Body)
-	for {
+	for !finished {
 		var chunk generateResponse
 		if err := decoder.Decode(&chunk); err != nil {
 			if errors.Is(err, io.EOF) {
-				break // a stream that ended without done: use what arrived
+				break
 			}
 			return nil, fmt.Errorf("%w: reading stream: %v", ErrUnavailable, err)
 		}
@@ -145,9 +146,18 @@ func (c *Client) collect(resp *http.Response, text string, onDelta func(string))
 			full.WriteString(chunk.Response)
 			onDelta(chunk.Response)
 		}
-		if chunk.Done {
-			break
-		}
+		finished = chunk.Done
+	}
+	if !finished {
+		// A stream that stops without `done` means the model was cut off: the backend reloaded, or the
+		// connection to it dropped. What arrived is half a sentence, and offering that as a rewrite is
+		// the quiet kind of lie this file avoids elsewhere — the client's own reader calls this shape
+		// "ended without an answer" and fails on it. So does this, and it says how far it got.
+		//
+		// Ollama sends done even when it stops at the token limit, so a missing done is never a
+		// finished answer that happens to be short.
+		return nil, fmt.Errorf("%w: the model stopped %d characters in, without finishing",
+			ErrUnavailable, full.Len())
 	}
 	return candidates(full.String(), text), nil
 }

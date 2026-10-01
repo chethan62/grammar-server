@@ -138,6 +138,33 @@ func TestRewriteStreamReportsABackendError(t *testing.T) {
 	}
 }
 
+// A stream that stops without `done` is not a shorter answer, it is half a sentence — and the honest
+// thing to do with half a sentence is fail. The client's reader treats the same shape the same way,
+// which is how this was noticed: two halves of one feature disagreeing about what "unfinished" means.
+func TestRewriteStreamEndingEarlyIsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// One chunk, then the connection simply ends: a backend that reloaded mid-answer.
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "We are reviewing the rep", "done": false})
+	}))
+	defer srv.Close()
+
+	var deltas []string
+	got, err := New(srv.URL, "m").RewriteStream(context.Background(), "text", "", "",
+		func(delta string) { deltas = append(deltas, delta) })
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err = %v, want ErrUnavailable", err)
+	}
+	if got != nil {
+		t.Errorf("candidates = %q, want none: a truncated sentence is not an answer", got)
+	}
+	if !strings.Contains(err.Error(), "without finishing") {
+		t.Errorf("the failure should say it stopped early rather than just 'unavailable': %v", err)
+	}
+	if len(deltas) != 1 {
+		t.Errorf("deltas = %q, want what did arrive handed over before the failure", deltas)
+	}
+}
+
 func TestBackendDownIsUnavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
