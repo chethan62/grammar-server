@@ -30,6 +30,28 @@ func TestIgnoredWordsAreReadAsAList(t *testing.T) {
 	}
 }
 
+// The read side of the ignore list is what a settings surface needs. Without it, a word added from a
+// card can never be seen or undone by the person who added it, and the list becomes a mystery that
+// only a text editor can settle.
+func TestTheIgnoreListCanBeReadBack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ignored-words")
+	if err := os.WriteFile(path, []byte("# my jargon\nZorbulating\n\n  kanban  \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	words := listIgnored(path)
+	if len(words) != 2 || words[0] != "Zorbulating" || words[1] != "kanban" {
+		t.Fatalf("the list should read back as written, comments dropped: %v", words)
+	}
+	if got := listIgnored(filepath.Join(t.TempDir(), "absent")); len(got) != 0 {
+		t.Fatalf("a missing file is an empty list, got %v", got)
+	}
+	// The matching rule must still see the same two entries, lower-cased: the two readers share one
+	// parser, and this is what would break if they ever stopped doing so.
+	if m := readIgnored(path); len(m) != 2 || !m["zorbulating"] || !m["kanban"] {
+		t.Fatalf("matching must stay case-insensitive: %v", m)
+	}
+}
+
 func TestOnlyTheIgnoredWordIsSwallowed(t *testing.T) {
 	text := "We are zorbulating the report today. Café hours are odd."
 	words := readIgnored("") // empty list: nothing is ignored yet
@@ -130,8 +152,9 @@ func TestIgnoreEndpointRefusesWhatItShould(t *testing.T) {
 		return rec
 	}
 
-	if rec := call(http.MethodGet, "", "127.0.0.1:41234"); rec.Code != 405 {
-		t.Errorf("GET /v2/ignore = %d, want 405", rec.Code)
+	// A method that is not ours is still refused — GET and POST are the two that mean something here.
+	if rec := call(http.MethodPut, `{"word":"kanban"}`, "127.0.0.1:41234"); rec.Code != 405 {
+		t.Errorf("PUT /v2/ignore = %d, want 405", rec.Code)
 	}
 	// The list is the engine's: a word added over the LAN would change what everyone else sees.
 	if rec := call(http.MethodPost, `{"word":"kanban"}`, "192.168.29.5:41234"); rec.Code != 403 {
@@ -160,6 +183,23 @@ func TestIgnoreEndpointRefusesWhatItShould(t *testing.T) {
 	}
 	if !readIgnored(added.Path)["kanban"] {
 		t.Fatal("the word should be in the file it just reported")
+	}
+
+	// The read side, in the same run: what GET reports must be what the write stored. This is the list a
+	// settings surface draws, so it is worth an assertion at the handler and not only in the parser.
+	rec = call(http.MethodGet, "", "127.0.0.1:41234")
+	if rec.Code != 200 {
+		t.Fatalf("GET /v2/ignore = %d (%s), want 200", rec.Code, rec.Body.String())
+	}
+	var listed struct {
+		Words []string `json:"words"`
+		Count int      `json:"count"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed.Count != 1 || len(listed.Words) != 1 || listed.Words[0] != "kanban" {
+		t.Fatalf("GET should report the one word added: %+v", listed)
 	}
 
 	rec = call(http.MethodPost, `{"word":"kanban","forget":true}`, "127.0.0.1:41234")

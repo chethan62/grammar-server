@@ -239,7 +239,7 @@ func (s *Server) SetListen(addr string) { s.listen = addr }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
-	mux.HandleFunc("/v2/ignore", s.handleIgnore) // words to stop reporting (writes: this machine only)
+	mux.HandleFunc("/v2/ignore", s.handleIgnore) // words to stop reporting (GET reads; writes: this machine only)
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
 	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
 	mux.HandleFunc("/v2/stats", s.handleStats)
@@ -276,6 +276,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 			"POST /v2/stats", "GET /v2/languages", "GET /status",
 			"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
 			"POST /v2/ignore (words to stop reporting; this machine only)",
+			"GET /v2/ignore (the words it stops reporting)",
 		},
 		// There is no page to open. The clients live in the grammar-ui repo and are desktop
 		// programs — a card at the caret, a selection checker on a shortcut, an AI-runner settings

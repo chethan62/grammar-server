@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -30,10 +31,12 @@ func ignorePath() string {
 	return filepath.Join(dir, "grammar-server", "ignored-words")
 }
 
-// readIgnored is that list, lower-cased for matching: "Zorbulating" and "zorbulating" are the same
-// word to a person, and a list that matched only one of them would read as broken.
-func readIgnored(path string) map[string]bool {
-	words := map[string]bool{}
+// listIgnored is the list as written: the word a person typed, not the lower-cased form matching uses.
+// Comments and blank lines are dropped — they belong to whoever wrote the file — and this is the only
+// place that decides what counts as an entry, so the matching rule and the read endpoint cannot
+// disagree about it.
+func listIgnored(path string) []string {
+	words := []string{}
 	if path == "" {
 		return words
 	}
@@ -46,7 +49,17 @@ func readIgnored(path string) map[string]bool {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		words[strings.ToLower(line)] = true
+		words = append(words, line)
+	}
+	return words
+}
+
+// readIgnored is that list, lower-cased for matching: "Zorbulating" and "zorbulating" are the same
+// word to a person, and a list that matched only one of them would read as broken.
+func readIgnored(path string) map[string]bool {
+	words := map[string]bool{}
+	for _, word := range listIgnored(path) {
+		words[strings.ToLower(word)] = true
 	}
 	return words
 }
@@ -107,14 +120,23 @@ func writeIgnored(path, word string, forget bool) error {
 	return os.WriteFile(path, []byte(strings.Join(kept, "\n")+"\n"), 0o600)
 }
 
-// handleIgnore is POST /v2/ignore: add a word to the list, or take one back with "forget": true.
+// handleIgnore is /v2/ignore: GET reads the list, POST adds a word to it or takes one back with
+// "forget": true.
 //
-// Writes are accepted from this machine only, the same rule the AI settings follow. The list is the
-// *engine's*, so a word added over the LAN would quietly change what everybody else sees, and a
-// request that crosses a machine boundary is not the same request.
+// The read is served to anyone who can reach the server, the same posture /status takes: the list is
+// the engine's, and what it stops reporting is not a secret. Only *changing* it is a machine-local act,
+// because a word added over the LAN would quietly change what everybody else sees.
 func (s *Server) handleIgnore(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		words := listIgnored(ignorePath())
+		sort.Strings(words)
+		writeJSON(w, 200, map[string]any{
+			"words": words, "count": len(words), "path": ignorePath(),
+		})
+		return
+	}
 	if r.Method != http.MethodPost {
-		writeError(w, 405, "POST /v2/ignore")
+		writeError(w, 405, "GET or POST /v2/ignore")
 		return
 	}
 	if !isLoopback(r) {
