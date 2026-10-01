@@ -63,8 +63,19 @@ query parameters work too; LT clients use all three:
   comma-separated string, like every other list parameter. `motherTongue` is
   accepted and ignored — it is part of the client contract, not a behaviour this
   server has.
-- `GET /status` reports the dialect the engine is currently configured for, and the address it
-  was launched on (`listen`), so a client can tell loopback from the network without asking.
+- `GET /status` reports the dialect the engine is currently configured for, the address it
+  was launched on (`listen`), so a client can tell loopback from the network without asking,
+  and how many words it has been told to stop reporting (`ignored`).
+- `POST /v2/ignore` — words to stop reporting: `{"word": "…"}` adds one,
+  `{"word": "…", "forget": true}` takes it back, and the answer carries the count and the
+  file that was written. Writes are accepted from this machine only, because the list
+  belongs to the engine: a word added over the LAN would change what everyone else sees.
+  The list is a plain file (`$XDG_CONFIG_HOME/grammar-server/ignored-words`, one word per
+  line, `#` comments) so it can be edited and undone by hand. This is deliberately *not* a
+  dictionary: harper still flags the word and every other editor still shows it — see
+  `references/harper-dictionaries.md` in the skill package for why harper's own
+  dictionaries cannot be used here. Filtering happens in `/v2/check`, the one place every
+  client's matches come through, so it covers clients written later too.
 - `replacements[]` come from harper-ls code actions.
 - Every key LanguageTool sends is present, including the ones a client reads without
   checking: `shortMessage` (empty when the rule has no short form), `sentenceRanges`

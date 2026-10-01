@@ -239,6 +239,7 @@ func (s *Server) SetListen(addr string) { s.listen = addr }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/check", s.handleCheck)
+	mux.HandleFunc("/v2/ignore", s.handleIgnore) // words to stop reporting (writes: this machine only)
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
 	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
 	mux.HandleFunc("/v2/stats", s.handleStats)
@@ -266,10 +267,15 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		// Who can reach this API belongs in the status: the default is loopback and
 		// --host 0.0.0.0 puts every endpoint on the network, unauthenticated.
 		"listen": s.listen,
+		// How many words this server has been told to stop reporting. In the status because a
+		// client on another machine cannot read the file, and "why is this word not flagged?"
+		// deserves an answer that does not require being on the right host.
+		"ignored": len(readIgnored(ignorePath())),
 		"endpoints": []string{
 			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
 			"POST /v2/stats", "GET /v2/languages", "GET /status",
 			"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
+			"POST /v2/ignore (words to stop reporting; this machine only)",
 		},
 		// There is no page to open. The clients live in the grammar-ui repo and are desktop
 		// programs — a card at the caret, a selection checker on a shortcut, an AI-runner settings
@@ -511,6 +517,11 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 	// reports the sentence it falls in (LanguageTool always populates this).
 	ranges := sentenceRanges(req.Text)
 
+	// The ignore list is read per check rather than cached: it is a few hundred bytes, the path is
+	// part of the server's config, and a cache here would need invalidating by whoever writes the
+	// file. ponytail: one file read per check; cache it on mtime if /v2/check ever shows it.
+	ignored := readIgnored(ignorePath())
+
 	matches := make([]Match, 0, len(lints))
 	for _, l := range lints {
 		// Clients filter by either the LanguageTool id (MORFOLOGIK_RULE_EN_US)
@@ -523,6 +534,11 @@ func (s *Server) buildResponse(req CheckRequest, lints []engine.Lint) CheckRespo
 			continue
 		}
 		if useEnableCat && !enabledCat[strings.ToUpper(rule.Category.ID)] {
+			continue
+		}
+		// Last, so an ignored word and a rule filter never interact — and here rather than in a
+		// client, because this is the one place every client's matches come through.
+		if ignoredText(req.Text, l.CharStart, l.CharEnd, ignored) {
 			continue
 		}
 		ctx := buildContext(req.Text, l.CharStart, l.CharEnd)
