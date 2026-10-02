@@ -191,10 +191,14 @@ machine — or a phone — can check text through the API:
 Dual-stack matters for the name: mDNS publishes an AAAA record, and an IPv6-preferring client
 that finds only an IPv4 listener gets "connection refused" from a name that works by address.
 
-There is no page to open. The clients are desktop programs in the
-[grammar-ui](https://github.com/chethan62/grammar-ui) repo — a suggestion card at the caret, a
-selection checker, and the AI-runner settings panel — and they run on this machine, because that
-is where the accessibility bus is. A phone can reach the API; it cannot run the card.
+There is no page to open. The client is a desktop app in the
+[grammar-ui](https://github.com/chethan62/grammar-ui) repo: one window with the checking, the
+rewriting and the rewrite backend in it, built for Windows and Linux. On Linux it also installs
+the helpers that hang off the desktop — check the text selected in any application
+(`grammar-lookup`), put the fix in a notification when the engine flags what you just wrote
+(`grammar-watch`), silence the checker for a while (`grammar-pause`). Those run on the machine
+they read from, which is where the accessibility bus is; a phone can reach this API and check its
+writing, but the window is a desktop app.
 
 Installing the engine on Windows or macOS is not built yet: `make bundle-windows-amd64` and
 `make bundle-darwin-arm64` cross-compile the server, but they need that platform's harper pair
@@ -207,14 +211,17 @@ which spends CPU on ollama. Checks are serialized, so a busy client slows everyo
 back to loopback-only. `grammar-doctor` reports which of the two the running engine is in, so
 the exposure is readable without opening the unit file.
 
-## AppImage (retired)
+## AppImage (moved to the app)
 
-There was an AppImage that started the engine, served the old browser UI from inside the bundle
-and opened it. That UI is gone: the clients are a desktop card needing Qt and the accessibility
-bus, which an AppImage of Python scripts cannot provide. The target could only copy files that no
-longer exist, so it is removed rather than left failing — `make package` above is the portable
-artifact today. `git log -- Makefile` has the old target if a portable-engine AppImage is wanted
-back.
+There was an AppImage here that started the engine, served the browser UI from inside the bundle
+and opened it. That UI is gone and the target went with it: it could only copy files that no
+longer exist. `git log -- Makefile` has it if a portable engine bundle is wanted back.
+
+The window is what ships as one now. `npm run tauri build` in grammar-ui produces the installers
+for both platforms, and CI runs it on every push (the `bundle` job, ubuntu and windows). On a
+machine with very new glibc the local AppImage step can fail inside `linuxdeploy`, whose bundled
+`strip` cannot read the `.relr.dyn` section those libraries carry; `NO_STRIP=1` gets past it by
+hand, and the CI runner is clean — which is why the artifact comes from there.
 
 ## Portable bundle (any platform)
 

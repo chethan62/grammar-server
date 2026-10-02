@@ -286,10 +286,16 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 			"GET /v2/dictionary (the words harper-ls accepts)",
 		},
 		// There is no page to open. The clients live in the grammar-ui repo and are desktop
-		// programs — a card at the caret, a selection checker on a shortcut, an AI-runner settings
-		// panel — so "static; serve it" was advice that had been wrong since the browser UI was
-		// deleted, and a client following it would have found nothing on that port.
-		"ui": "https://github.com/chethan62/grammar-ui — desktop clients (Qt), not a page: a suggestion card at the caret, a selection checker, and the AI-runner settings panel. This API is reachable from anywhere on the network; changing the backend is not.",
+		// programs — one window for checking, rewriting and choosing the backend, plus the
+		// Linux-only helpers that hang off the desktop — so "static; serve it" was advice that had
+		// been wrong since the browser UI was deleted, and a client following it would have found
+		// nothing on that port.
+		//
+		// This string named a Qt card at the caret for as long as it took someone to read it. The
+		// card was deleted when the window replaced it and nothing here failed, because a
+		// description that goes stale is still a description. Anything a client can read is a
+		// claim about this build, so it is kept to what the repo actually ships.
+		"ui": "https://github.com/chethan62/grammar-ui — a desktop app (Tauri), not a page: one window for checking, rewriting and the rewrite backend, built for Windows and Linux. On Linux it also installs the helpers that hang off the desktop — check the text selected in any application, put the fix in a notification, silence the checker for a while. This API is reachable from anywhere on the network; changing the backend is not.",
 	})
 }
 
