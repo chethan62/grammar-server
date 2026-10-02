@@ -244,6 +244,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
 	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
 	mux.HandleFunc("/v2/stats", s.handleStats)
+	mux.HandleFunc("/v2/pause", s.handlePause)          // pause state from the watcher (read-only)
 	mux.HandleFunc("/v2/languages", s.handleLanguages)
 	mux.HandleFunc("/status", s.handleRoot)
 	mux.HandleFunc("/v1/ai", s.handleAI) // read + set the rewrite backend (writes: this machine only)
