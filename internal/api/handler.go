@@ -236,19 +236,49 @@ func NewServer(eng *engine.Harper) *Server {
 // report it. Empty when a server is built without one (tests).
 func (s *Server) SetListen(addr string) { s.listen = addr }
 
+// routes is every pattern this build serves, mapped to its handler. It exists so the paths have ONE
+// source: /status advertises a hand-written list of endpoint descriptions, and a hand-written list beside
+// the routes it describes is exactly what drifts. It had already drifted — /v2/pause was registered and
+// missing from the advertisement, and nothing noticed, because nothing connected the two. `Handler` builds
+// the mux from this map and TestStatusAdvertisesEveryRoute compares it against what /status says, so the
+// next one fails the build instead of quietly disappearing from the index.
+//
+// "/" is deliberately not here: it is the index itself, not an endpoint the index needs to advertise.
+func (s *Server) routes() map[string]http.HandlerFunc {
+	return map[string]http.HandlerFunc{
+		"/v2/check":        s.handleCheck,
+		"/v2/ignore":       s.handleIgnore,
+		"/v2/dictionary":   s.handleDictionary,
+		"/v2/fix-sentence": s.handleFixSentence,
+		"/v2/rewrite":      s.handleRewrite,
+		"/v2/stats":        s.handleStats,
+		"/v2/pause":        s.handlePause,
+		"/v2/languages":    s.handleLanguages,
+		"/status":          s.handleRoot,
+		"/v1/ai":           s.handleAI,
+	}
+}
+
+// endpointDocs is what /status advertises, as hand-written descriptions of the routes in `routes()`. The
+// path is the second field of each line, which is what TestStatusAdvertisesEveryRoute compares — the two
+// lists are allowed to differ in wording, never in which paths exist.
+var endpointDocs = []string{
+	"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
+	"POST /v2/stats", "GET /v2/languages", "GET /status",
+	"GET /v2/pause (whether the checker is paused, and until when — the watcher owns it)",
+	"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
+	"POST /v2/ignore (words to stop reporting; this machine only)",
+	"GET /v2/ignore (the words it stops reporting)",
+	"POST /v2/dictionary (teach harper-ls a word; this machine only)",
+	"GET /v2/dictionary (the words harper-ls accepts)",
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v2/check", s.handleCheck)
-	mux.HandleFunc("/v2/ignore", s.handleIgnore)         // words to stop reporting (GET reads; writes: this machine only)
-	mux.HandleFunc("/v2/dictionary", s.handleDictionary) // words harper-ls itself accepts (GET reads; writes: this machine only)
-	mux.HandleFunc("/v2/fix-sentence", s.handleFixSentence)
-	mux.HandleFunc("/v2/rewrite", s.handleRewrite)
-	mux.HandleFunc("/v2/stats", s.handleStats)
-	mux.HandleFunc("/v2/pause", s.handlePause) // pause state from the watcher (read-only)
-	mux.HandleFunc("/v2/languages", s.handleLanguages)
-	mux.HandleFunc("/status", s.handleRoot)
-	mux.HandleFunc("/v1/ai", s.handleAI) // read + set the rewrite backend (writes: this machine only)
-	mux.HandleFunc("/", s.handleRoot)    // API index: the UI lives in its own repo now
+	for pattern, handler := range s.routes() {
+		mux.HandleFunc(pattern, handler)
+	}
+	mux.HandleFunc("/", s.handleRoot) // API index: the UI lives in its own repo now
 	return logRequests(mux)
 }
 
@@ -277,15 +307,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		// are words this server pretends not to see, these are words the engine knows, and a client that
 		// cannot tell them apart cannot explain why one word is flagged in LibreOffice and another is not.
 		"dictionary": len(listDictionary(dictionaryPath())),
-		"endpoints": []string{
-			"POST /v2/check", "POST /v2/fix-sentence", "POST /v2/rewrite",
-			"POST /v2/stats", "GET /v2/languages", "GET /status",
-			"GET /v1/ai (what rewrite backend is configured)", "POST /v1/ai (change it, this machine only)",
-			"POST /v2/ignore (words to stop reporting; this machine only)",
-			"GET /v2/ignore (the words it stops reporting)",
-			"POST /v2/dictionary (teach harper-ls a word; this machine only)",
-			"GET /v2/dictionary (the words harper-ls accepts)",
-		},
+		"endpoints":  endpointDocs,
 		// There is no page to open. The clients live in the grammar-ui repo and are desktop
 		// programs — one window for checking, rewriting and choosing the backend, plus the
 		// Linux-only helpers that hang off the desktop — so "static; serve it" was advice that had
