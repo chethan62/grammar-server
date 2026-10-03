@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"grammar-server/internal/engine"
 )
@@ -190,5 +191,30 @@ func TestDictionaryGetReadsTheFileWithoutAnEngine(t *testing.T) {
 		if !strings.Contains(w.Body.String(), `"`+field+`"`) {
 			t.Fatalf("the answer must carry %q: %s", field, w.Body)
 		}
+	}
+}
+
+func TestDictionaryAcceptsAnswersBothWays(t *testing.T) {
+	// The verdict is what lets a client tell a word that took effect from one merely written down, and it
+	// was vacuous: the finding the probe needed was read against the wrong length and dropped, so every
+	// word came back accepted — including one harper flags. Both directions are asserted because either
+	// direction alone passes with that bug in place: one says "cannot answer true", the other "cannot
+	// answer false".
+	h, err := engine.NewHarper("harper-ls", "American", nil)
+	if err != nil {
+		t.Skipf("harper-ls not available: %v", err)
+	}
+	defer h.Close()
+	time.Sleep(500 * time.Millisecond)
+	s := NewServer(h)
+
+	// A word nobody taught it. If an earlier run had left this word in the dictionary file the question
+	// would be the wrong one, so it is the same nonsense word the rest of this file uses and no test here
+	// ever writes to the real dictionary.
+	if s.dictionaryAccepts("zorbulating") {
+		t.Error("harper flags zorbulating, so the probe must not report it as accepted")
+	}
+	if !s.dictionaryAccepts("report") {
+		t.Error("harper knows report, so the probe must report it as accepted")
 	}
 }

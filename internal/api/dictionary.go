@@ -149,10 +149,13 @@ func (s *Server) dictionaryAccepts(word string) bool {
 	if err != nil {
 		return false
 	}
-	// Offsets are UTF-16 code units, so they go through the same conversion the ignore filter uses.
+	// Offsets are UTF-16 code units, so they go through the same conversion the ignore filter uses. The
+	// bounds are the PROBE's: read against the length of the word instead — which is what this did — a
+	// finding that starts past the first len(word) bytes is thrown away, and every word comes back
+	// "accepted: true", including one harper had just been told to forget. Measured, on exactly that word.
 	for _, lint := range lints {
 		start, end := u16ToByte(probe, lint.CharStart), u16ToByte(probe, lint.CharEnd)
-		if start < 0 || end > len(word) || start >= end {
+		if start < 0 || end > len(probe) || start >= end {
 			continue
 		}
 		if strings.EqualFold(probe[start:end], word) {
