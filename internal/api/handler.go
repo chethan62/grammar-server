@@ -249,6 +249,7 @@ func (s *Server) routes() map[string]http.HandlerFunc {
 		"/v2/check":        s.handleCheck,
 		"/v2/ignore":       s.handleIgnore,
 		"/v2/dictionary":   s.handleDictionary,
+		"/v2/complete":     s.handleComplete,
 		"/v2/fix-sentence": s.handleFixSentence,
 		"/v2/rewrite":      s.handleRewrite,
 		"/v2/stats":        s.handleStats,
@@ -272,6 +273,7 @@ var endpointDocs = []string{
 	"POST /v2/dictionary (teach harper-ls a word; this machine only)",
 	"DELETE /v2/dictionary (take a word back out, named by ?word=; this machine only)",
 	"GET /v2/dictionary (the words harper-ls accepts)",
+	"GET /v2/complete (the words that start with ?prefix=; this machine's own come first)",
 }
 
 func (s *Server) Handler() http.Handler {

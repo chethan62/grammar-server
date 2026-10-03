@@ -54,6 +54,10 @@ type Harper struct {
 	ruleOnce sync.Once // the rule list is read from the CLI once
 	rules    map[string]ruleInfo
 	ruleErr  error
+
+	wordOnce sync.Once // harper's own word list, read from the CLI once
+	words    []string
+	wordErr  error
 }
 
 // diagnosticsTimeout bounds one document's lint. harper answers in milliseconds;
@@ -203,6 +207,40 @@ func (h *Harper) ruleList() (map[string]ruleInfo, error) {
 		h.rules = rules
 	})
 	return h.rules, h.ruleErr
+}
+
+// Words is harper's own dictionary, read from the paired CLI — 134,882 entries in ~0.4 s, measured — and
+// read once per engine for the reason ruleList documents: it is a fork of a large binary, and the answer
+// cannot change while the process lives.
+//
+// Each line arrives quoted (`"specular"`), which is the CLI's serialization rather than a word, so the
+// quotes come off here and nowhere else. None of the 134,882 lines carries a backslash (measured), so this
+// is deliberately a trim rather than a parser.
+//
+// It contains affix *stems* — `specif` for specify/specific — which are words to harper and not to a person.
+// They are left in: they are valid completions (accepting one is never flagged), and filtering them needs a
+// per-word `metadata` call over the whole list, which is 134,882 forks. Upgrade path if it ever matters.
+func (h *Harper) Words() ([]string, error) {
+	h.wordOnce.Do(func() {
+		out, err := exec.Command(h.cliBin(), "words").Output()
+		if err != nil {
+			h.wordErr = err
+			return
+		}
+		words := make([]string, 0, 140000)
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if len(line) > 2 && strings.HasPrefix(line, `"`) && strings.HasSuffix(line, `"`) {
+				words = append(words, line[1:len(line)-1])
+			}
+		}
+		if len(words) == 0 {
+			h.wordErr = errors.New("empty word list")
+			return
+		}
+		h.words = words
+	})
+	return h.words, h.wordErr
 }
 
 // Dialect reports the dialect the engine is currently configured for. The check
