@@ -270,6 +270,7 @@ var endpointDocs = []string{
 	"POST /v2/ignore (words to stop reporting; this machine only)",
 	"GET /v2/ignore (the words it stops reporting)",
 	"POST /v2/dictionary (teach harper-ls a word; this machine only)",
+	"DELETE /v2/dictionary (take a word back out, named by ?word=; this machine only)",
 	"GET /v2/dictionary (the words harper-ls accepts)",
 }
 

@@ -95,6 +95,44 @@ func appendDictionary(path, word string) (bool, error) {
 	return true, nil
 }
 
+// removeDictionary takes one word out and reports whether it was there. Every other line is kept — a word
+// typed into the file by hand is not this endpoint's to lose — and the rewrite is temp-and-rename, so a
+// failed write cannot leave a half-written dictionary behind.
+func removeDictionary(path, word string) (bool, error) {
+	if path == "" {
+		return false, os.ErrNotExist
+	}
+	word = strings.TrimSpace(word)
+	if word == "" {
+		return false, os.ErrInvalid
+	}
+	kept := []string{}
+	found := false
+	for _, have := range listDictionary(path) {
+		if strings.EqualFold(have, word) {
+			found = true
+			continue
+		}
+		kept = append(kept, have)
+	}
+	if !found {
+		return false, nil
+	}
+	body := ""
+	if len(kept) > 0 {
+		body = strings.Join(kept, "\n") + "\n"
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+		return false, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return false, err
+	}
+	return true, nil
+}
+
 // dictionaryAccepts reports whether harper-ls now accepts the word, by asking it.
 //
 // The endpoint verifies its own effect instead of reporting what it intended: restarting a process and
@@ -124,8 +162,8 @@ func (s *Server) dictionaryAccepts(word string) bool {
 	return true
 }
 
-// handleDictionary is /v2/dictionary: GET reads the words harper-ls accepts on this machine, POST adds
-// one and makes it take effect.
+// handleDictionary is /v2/dictionary: GET reads the words harper-ls accepts on this machine, POST adds one
+// and makes it take effect, DELETE takes one back out and makes that take effect too.
 //
 // The read is served to anyone who can reach the server, matching /status and /v2/ignore: what the engine
 // knows is not a secret, and a client elsewhere can then explain why a word is not flagged. Only changing
@@ -141,39 +179,60 @@ func (s *Server) handleDictionary(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if r.Method != http.MethodPost {
-		writeError(w, 405, "GET or POST /v2/dictionary")
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		writeError(w, 405, "GET, POST or DELETE /v2/dictionary")
 		return
 	}
 	if !isLoopback(r) {
 		writeError(w, 403, "the dictionary can only be changed on the machine the server runs on")
 		return
 	}
-	var in struct {
-		Word string `json:"word"`
+	// POST carries the word in the body; DELETE carries it in the query, so a client that will not put a
+	// body on a DELETE can still take a word back out — and `curl -X DELETE '.../v2/dictionary?word=x'` is
+	// a complete sentence.
+	word := ""
+	switch r.Method {
+	case http.MethodPost:
+		var in struct {
+			Word string `json:"word"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in); err != nil {
+			writeError(w, 400, `the body must be JSON: {"word": "..."}`)
+			return
+		}
+		word = in.Word
+	case http.MethodDelete:
+		word = r.URL.Query().Get("word")
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in); err != nil {
-		writeError(w, 400, `the body must be JSON: {"word": "..."}`)
-		return
-	}
-	word := strings.TrimSpace(in.Word)
+	word = strings.TrimSpace(word)
 	if word == "" {
 		writeError(w, 400, "word is required")
 		return
 	}
-	if strings.ContainsAny(word, " \t") {
+	if strings.ContainsAny(word, " 	") {
 		writeError(w, 400, "the dictionary takes one word, not a phrase")
 		return
 	}
-	added, err := appendDictionary(path, word)
+	action := "added"
+	if r.Method == http.MethodDelete {
+		action = "removed"
+	}
+	var changed bool
+	var err error
+	if action == "removed" {
+		changed, err = removeDictionary(path, word)
+	} else {
+		changed, err = appendDictionary(path, word)
+	}
 	if err != nil {
 		writeError(w, 500, "could not write the dictionary: %v", err)
 		return
 	}
-	if added {
+	if changed {
 		// Every answer the engine has already given for this text is now suspect, and a stale one is
 		// exactly what makes a taught word look like it did not work — measured: the same sentence
-		// reported the misspelling after the word was written, until this line existed.
+		// reported the misspelling after the word was written, until this line existed. It cuts the same
+		// way for a removal, where the stale answer is the one that says the word is fine.
 		s.cache.clear()
 	}
 	// harper-ls reads the file at startup, so the word only counts once the process has restarted.
@@ -190,9 +249,12 @@ func (s *Server) handleDictionary(w http.ResponseWriter, r *http.Request) {
 	}
 	accepted := reloaded && s.dictionaryAccepts(word)
 	// The path and the verdict both come back: a client can name the file, and it can tell a word that
-	// took effect from one that is merely written down.
-	writeJSON(w, 200, map[string]any{
-		"word": word, "added": added, "reloaded": reloaded, "accepted": accepted,
+	// took effect from one that is merely written down. `accepted` after a removal is a real question —
+	// harper knows plenty of words on its own — so it is measured rather than assumed false.
+	report := map[string]any{
+		"word": word, "changed": changed, "reloaded": reloaded, "accepted": accepted,
 		"count": len(listDictionary(path)), "path": path,
-	})
+	}
+	report[action] = changed // "added" or "removed": the answer says which verb it performed
+	writeJSON(w, 200, report)
 }
